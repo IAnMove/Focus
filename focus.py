@@ -1464,6 +1464,11 @@ class FocusApp(tk.Tk):
         )
 
     def delete_item(self, item_id: int) -> None:
+        target = next((item for item in self.items if item["id"] == item_id), None)
+        if target is None:
+            return
+        if not messagebox.askyesno("Delete task", f"Delete this task?\n\n{target['text']}", parent=self):
+            return
         self.items = [item for item in self.items if item["id"] != item_id]
         self.save_data()
         self.render_items()
