@@ -1,4 +1,4 @@
-import { Button, ScrollView } from "std-widgets.slint";
+import { Button, LineEdit, ScrollView } from "std-widgets.slint";
 
 export struct TabView {
     name: string,
@@ -82,6 +82,11 @@ component MetricPill inherits Rectangle {
     }
 }
 
+component TaskActionButton inherits Button {
+    in property <string> caption;
+    text: caption;
+}
+
 component TaskCard inherits Rectangle {
     in property <TaskView> task;
     in property <color> panel;
@@ -90,12 +95,16 @@ component TaskCard inherits Rectangle {
     in property <color> border;
     in property <color> text-main;
     in property <color> text-muted;
+    callback complete(task-id: int);
+    callback edit(task-id: int);
+    callback remove(task-id: int);
+    callback toggle-current(task-id: int);
 
     border-radius: 18px;
     border-width: 1px;
     border-color: task.is_current ? accent : border;
     background: task.is_current ? panel-alt : panel;
-    min-height: task.has_extra ? 122px : 98px;
+    min-height: task.has_extra ? 156px : 132px;
 
     VerticalLayout {
         padding: 14px;
@@ -187,6 +196,30 @@ component TaskCard inherits Rectangle {
             wrap: word-wrap;
             font-size: 12px;
         }
+
+        HorizontalLayout {
+            spacing: 6px;
+
+            TaskActionButton {
+                caption: "Done";
+                clicked => { root.complete(task.id); }
+            }
+
+            TaskActionButton {
+                caption: task.is_current ? "Unpin" : "Current";
+                clicked => { root.toggle-current(task.id); }
+            }
+
+            TaskActionButton {
+                caption: "Edit";
+                clicked => { root.edit(task.id); }
+            }
+
+            TaskActionButton {
+                caption: "Delete";
+                clicked => { root.remove(task.id); }
+            }
+        }
     }
 }
 
@@ -204,12 +237,23 @@ export component AppWindow inherits Window {
     in-out property <int> done-today-count: 0;
     in-out property <int> done-month-count: 0;
     in-out property <int> done-year-count: 0;
+    in-out property <string> draft-title: "";
+    in-out property <string> draft-extra: "";
+    in-out property <bool> editing-mode: false;
+    in-out property <bool> can-undo: false;
 
     callback add-task();
     callback show-history();
     callback show-tools();
     callback toggle-on-top();
     callback select-tab(name: string);
+    callback submit-draft();
+    callback cancel-draft();
+    callback complete-task(task-id: int);
+    callback edit-task(task-id: int);
+    callback delete-task(task-id: int);
+    callback toggle-current(task-id: int);
+    callback undo-complete();
 
     title: app-title;
     width: 460px;
@@ -218,7 +262,6 @@ export component AppWindow inherits Window {
     min-height: 560px;
     background: #0b1120;
 
-    property <color> bg: #0b1120;
     property <color> panel: #121a2b;
     property <color> panel-alt: #17233a;
     property <color> panel-soft: #0f1728;
@@ -236,8 +279,8 @@ export component AppWindow inherits Window {
         Rectangle {
             border-radius: 24px;
             border-width: 1px;
-            border-color: border;
-            background: panel;
+            border-color: root.border;
+            background: root.panel;
             height: 94px;
 
             HorizontalLayout {
@@ -249,15 +292,15 @@ export component AppWindow inherits Window {
                     horizontal-stretch: 1;
 
                     Text {
-                        text: app-title;
-                        color: text-main;
+                        text: root.app-title;
+                        color: root.text-main;
                         font-size: 24px;
                         font-weight: 800;
                     }
 
                     Text {
-                        text: status-text;
-                        color: text-muted;
+                        text: root.status-text;
+                        color: root.text-muted;
                         font-size: 12px;
                     }
                 }
@@ -266,8 +309,8 @@ export component AppWindow inherits Window {
                     spacing: 6px;
 
                     Button {
-                        text: "Add task";
-                        clicked => { add-task(); }
+                        text: root.editing-mode ? "Editing" : "Add task";
+                        clicked => { root.add-task(); }
                     }
 
                     HorizontalLayout {
@@ -275,13 +318,63 @@ export component AppWindow inherits Window {
 
                         Button {
                             text: "History";
-                            clicked => { show-history(); }
+                            clicked => { root.show-history(); }
                         }
 
                         Button {
-                            text: on-top-enabled ? "Pinned" : "Pin";
-                            clicked => { toggle-on-top(); }
+                            text: root.on-top-enabled ? "Pinned" : "Pin";
+                            clicked => { root.toggle-on-top(); }
                         }
+                    }
+                }
+            }
+        }
+
+        Rectangle {
+            border-radius: 22px;
+            border-width: 1px;
+            border-color: root.border;
+            background: root.panel;
+            min-height: 126px;
+
+            VerticalLayout {
+                padding: 14px;
+                spacing: 8px;
+
+                Text {
+                    text: root.editing-mode ? "Edit task" : "Quick add";
+                    color: root.text-main;
+                    font-size: 15px;
+                    font-weight: 700;
+                }
+
+                LineEdit {
+                    text <=> root.draft-title;
+                    placeholder-text: "Task title";
+                }
+
+                LineEdit {
+                    text <=> root.draft-extra;
+                    placeholder-text: "Extra info (optional)";
+                }
+
+                HorizontalLayout {
+                    spacing: 8px;
+
+                    Button {
+                        text: root.editing-mode ? "Save" : "Create";
+                        clicked => { root.submit-draft(); }
+                    }
+
+                    Button {
+                        text: "Cancel";
+                        enabled: root.editing-mode || root.draft-title != "" || root.draft-extra != "";
+                        clicked => { root.cancel-draft(); }
+                    }
+
+                    if (root.can-undo) : Button {
+                        text: "Undo";
+                        clicked => { root.undo-complete(); }
                     }
                 }
             }
@@ -292,7 +385,7 @@ export component AppWindow inherits Window {
 
             MetricPill {
                 label: "Pending";
-                value: pending-count;
+                value: root.pending-count;
                 panel: root.panel;
                 border: root.border;
                 text-main: root.text-main;
@@ -301,7 +394,7 @@ export component AppWindow inherits Window {
 
             MetricPill {
                 label: "Today";
-                value: done-today-count;
+                value: root.done-today-count;
                 panel: root.panel;
                 border: root.border;
                 text-main: root.text-main;
@@ -310,7 +403,7 @@ export component AppWindow inherits Window {
 
             MetricPill {
                 label: "Month";
-                value: done-month-count;
+                value: root.done-month-count;
                 panel: root.panel;
                 border: root.border;
                 text-main: root.text-main;
@@ -319,7 +412,7 @@ export component AppWindow inherits Window {
 
             MetricPill {
                 label: "Year";
-                value: done-year-count;
+                value: root.done-year-count;
                 panel: root.panel;
                 border: root.border;
                 text-main: root.text-main;
@@ -330,8 +423,8 @@ export component AppWindow inherits Window {
         Rectangle {
             border-radius: 20px;
             border-width: 1px;
-            border-color: border;
-            background: panel;
+            border-color: root.border;
+            background: root.panel;
             height: 54px;
 
             HorizontalLayout {
@@ -345,26 +438,26 @@ export component AppWindow inherits Window {
                     panel: root.panel-soft;
                     text-main: root.text-main;
                     text-muted: root.text-muted;
-                    pressed => { show-tools(); }
+                    pressed => { root.show-tools(); }
                 }
 
-                for tab in tabs : TagChip {
+                for tab in root.tabs : TagChip {
                     label: tab.name;
                     selected: tab.selected;
                     accent: root.accent;
                     panel: root.panel-soft;
                     text-main: root.text-main;
                     text-muted: root.text-muted;
-                    pressed => { select-tab(tab.name); }
+                    pressed => { root.select-tab(tab.name); }
                 }
             }
         }
 
-        if (has-current-task) : Rectangle {
+        if (root.has-current-task) : Rectangle {
             border-radius: 24px;
             border-width: 1px;
-            border-color: accent;
-            background: panel-alt;
+            border-color: root.accent;
+            background: root.panel-alt;
             min-height: 108px;
 
             VerticalLayout {
@@ -373,22 +466,22 @@ export component AppWindow inherits Window {
 
                 Text {
                     text: "Current task";
-                    color: accent;
+                    color: root.accent;
                     font-size: 12px;
                     font-weight: 800;
                 }
 
                 Text {
-                    text: current-title;
-                    color: text-main;
+                    text: root.current-title;
+                    color: root.text-main;
                     wrap: word-wrap;
                     font-size: 20px;
                     font-weight: 700;
                 }
 
                 Text {
-                    text: current-meta;
-                    color: text-muted;
+                    text: root.current-meta;
+                    color: root.text-muted;
                     wrap: word-wrap;
                     font-size: 12px;
                 }
@@ -398,8 +491,8 @@ export component AppWindow inherits Window {
         Rectangle {
             border-radius: 24px;
             border-width: 1px;
-            border-color: border;
-            background: panel;
+            border-color: root.border;
+            background: root.panel;
             vertical-stretch: 1;
 
             VerticalLayout {
@@ -414,15 +507,15 @@ export component AppWindow inherits Window {
                         horizontal-stretch: 1;
 
                         Text {
-                            text: active-tab-name == "All" ? "All tasks" : active-tab-name;
-                            color: text-main;
+                            text: root.active-tab-name == "All" ? "All tasks" : root.active-tab-name;
+                            color: root.text-main;
                             font-size: 18px;
                             font-weight: 700;
                         }
 
                         Text {
-                            text: footer-text;
-                            color: text-muted;
+                            text: root.footer-text;
+                            color: root.text-muted;
                             font-size: 12px;
                             wrap: word-wrap;
                         }
@@ -432,12 +525,12 @@ export component AppWindow inherits Window {
                         width: 40px;
                         height: 40px;
                         border-radius: 20px;
-                        background: accent-warm;
+                        background: root.accent-warm;
 
                         Text {
                             x: (parent.width - self.width) / 2;
                             y: (parent.height - self.height) / 2;
-                            text: pending-count + "";
+                            text: root.pending-count + "";
                             color: #111827;
                             font-size: 16px;
                             font-weight: 800;
@@ -447,14 +540,14 @@ export component AppWindow inherits Window {
 
                 Rectangle {
                     height: 1px;
-                    background: border;
+                    background: root.border;
                 }
 
-                if (tasks.length == 0) : Rectangle {
+                if (root.tasks.length == 0) : Rectangle {
                     border-radius: 18px;
                     border-width: 1px;
-                    border-color: border;
-                    background: panel-soft;
+                    border-color: root.border;
+                    background: root.panel-soft;
                     vertical-stretch: 1;
 
                     VerticalLayout {
@@ -463,28 +556,28 @@ export component AppWindow inherits Window {
 
                         Text {
                             text: "No tasks in this view";
-                            color: text-main;
+                            color: root.text-main;
                             font-size: 18px;
                             font-weight: 700;
                         }
 
                         Text {
-                            text: "The next task will connect add, complete and edit actions to this layout.";
-                            color: text-muted;
+                            text: "Use the quick add panel to create the next task.";
+                            color: root.text-muted;
                             wrap: word-wrap;
                             font-size: 13px;
                         }
                     }
                 }
 
-                if (tasks.length > 0) : ScrollView {
+                if (root.tasks.length > 0) : ScrollView {
                     vertical-stretch: 1;
 
                     VerticalLayout {
                         spacing: 10px;
                         padding-right: 2px;
 
-                        for task[index] in tasks : TaskCard {
+                        for task[index] in root.tasks : TaskCard {
                             task: task;
                             panel: index % 2 == 0 ? root.panel-soft : root.panel;
                             panel-alt: root.panel-alt;
@@ -492,6 +585,10 @@ export component AppWindow inherits Window {
                             border: root.border;
                             text-main: root.text-main;
                             text-muted: root.text-muted;
+                            complete(task-id) => { root.complete-task(task-id); }
+                            edit(task-id) => { root.edit-task(task-id); }
+                            remove(task-id) => { root.delete-task(task-id); }
+                            toggle-current(task-id) => { root.toggle-current(task-id); }
                         }
                     }
                 }
