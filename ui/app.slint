@@ -1,0 +1,313 @@
+export component AppWindow inherits Window {
+    in-out property <string> app-title: "focus";
+    in-out property <string> status-text: "Loading";
+    in-out property <string> footer-text: "";
+    in-out property <bool> on-top-enabled: true;
+
+    callback add-task();
+    callback show-history();
+    callback show-tools();
+    callback toggle-on-top();
+
+    title: app-title;
+    width: 460px;
+    height: 740px;
+    min-width: 360px;
+    min-height: 560px;
+    background: #0d1321;
+
+    property <color> bg: #0d1321;
+    property <color> panel: #151d2f;
+    property <color> panel-2: #1b2740;
+    property <color> accent: #6fffe9;
+    property <color> accent-2: #ffd166;
+    property <color> text-main: #f5f7ff;
+    property <color> text-muted: #96a3bf;
+    property <color> border: #25324e;
+    property <color> success: #7bd389;
+
+    VerticalLayout {
+        padding: 12px;
+        spacing: 10px;
+
+        Rectangle {
+            border-radius: 18px;
+            background: panel;
+            border-width: 1px;
+            border-color: border;
+            height: 56px;
+
+            HorizontalLayout {
+                padding: 10px;
+                spacing: 8px;
+
+                VerticalLayout {
+                    spacing: 2px;
+
+                    Text {
+                        text: app-title;
+                        color: text-main;
+                        font-size: 22px;
+                        font-weight: 700;
+                    }
+
+                    Text {
+                        text: status-text;
+                        color: text-muted;
+                        font-size: 12px;
+                    }
+                }
+
+                Rectangle {
+                    horizontal-stretch: 1;
+                    background: transparent;
+                }
+
+                Button {
+                    text: "Add";
+                    clicked => { add-task(); }
+                }
+
+                Button {
+                    text: "History";
+                    clicked => { show-history(); }
+                }
+
+                Button {
+                    text: on-top-enabled ? "Pinned" : "Pin";
+                    clicked => { toggle-on-top(); }
+                }
+            }
+        }
+
+        Rectangle {
+            border-radius: 16px;
+            background: panel;
+            border-width: 1px;
+            border-color: border;
+            height: 52px;
+
+            HorizontalLayout {
+                padding: 8px;
+                spacing: 8px;
+
+                for tab in ["All", "General", "Work", "Today"] : Button {
+                    text: tab;
+                }
+            }
+        }
+
+        HorizontalLayout {
+            spacing: 10px;
+
+            Rectangle {
+                border-radius: 20px;
+                background: panel;
+                border-width: 1px;
+                border-color: border;
+                horizontal-stretch: 1;
+                vertical-stretch: 1;
+
+                VerticalLayout {
+                    padding: 12px;
+                    spacing: 10px;
+
+                    Rectangle {
+                        border-radius: 14px;
+                        background: panel-2;
+                        border-width: 1px;
+                        border-color: border;
+                        height: 96px;
+
+                        VerticalLayout {
+                            padding: 12px;
+                            spacing: 6px;
+
+                            Text {
+                                text: "Current task";
+                                color: accent;
+                                font-size: 12px;
+                                font-weight: 700;
+                            }
+
+                            Text {
+                                text: "Define the first Rust migration milestone";
+                                color: text-main;
+                                wrap: word-wrap;
+                                font-size: 18px;
+                                font-weight: 600;
+                            }
+
+                            Text {
+                                text: "Placeholder card for the Slint port";
+                                color: text-muted;
+                                font-size: 12px;
+                            }
+                        }
+                    }
+
+                    Rectangle {
+                        border-radius: 14px;
+                        background: #121a2b;
+                        border-width: 1px;
+                        border-color: border;
+                        vertical-stretch: 1;
+
+                        VerticalLayout {
+                            padding: 18px;
+                            spacing: 12px;
+
+                            Text {
+                                text: "Task list placeholder";
+                                color: text-main;
+                                font-size: 16px;
+                                font-weight: 600;
+                            }
+
+                            Text {
+                                text: "The next tasks will wire the Rust data model, persistence and task actions into this view.";
+                                color: text-muted;
+                                wrap: word-wrap;
+                                font-size: 13px;
+                            }
+
+                            Rectangle {
+                                height: 1px;
+                                background: border;
+                            }
+
+                            for item in [
+                                "Create Cargo + Slint scaffold",
+                                "Port task model and JSON storage",
+                                "Connect task CRUD and history"
+                            ] : Rectangle {
+                                border-radius: 12px;
+                                background: panel;
+                                border-width: 1px;
+                                border-color: border;
+                                height: 64px;
+
+                                HorizontalLayout {
+                                    padding: 10px;
+                                    spacing: 10px;
+
+                                    Rectangle {
+                                        width: 18px;
+                                        height: 18px;
+                                        border-radius: 9px;
+                                        border-width: 2px;
+                                        border-color: accent;
+                                        background: transparent;
+                                    }
+
+                                    VerticalLayout {
+                                        spacing: 4px;
+
+                                        Text {
+                                            text: item;
+                                            color: text-main;
+                                            font-size: 14px;
+                                            font-weight: 500;
+                                            wrap: word-wrap;
+                                        }
+
+                                        Text {
+                                            text: "Prepared as static UI placeholder";
+                                            color: text-muted;
+                                            font-size: 11px;
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+
+            Rectangle {
+                width: 144px;
+                border-radius: 20px;
+                background: panel;
+                border-width: 1px;
+                border-color: border;
+
+                VerticalLayout {
+                    padding: 12px;
+                    spacing: 10px;
+
+                    Text {
+                        text: "Tools";
+                        color: text-main;
+                        font-size: 15px;
+                        font-weight: 600;
+                    }
+
+                    Button {
+                        text: "Open tools";
+                        clicked => { show-tools(); }
+                    }
+
+                    Rectangle {
+                        border-radius: 12px;
+                        background: panel-2;
+                        border-width: 1px;
+                        border-color: border;
+                        height: 88px;
+
+                        VerticalLayout {
+                            padding: 10px;
+                            spacing: 4px;
+
+                            Text {
+                                text: "Always on top";
+                                color: text-main;
+                                font-size: 12px;
+                                font-weight: 600;
+                            }
+
+                            Text {
+                                text: on-top-enabled ? "Enabled by default" : "Disabled";
+                                color: on-top-enabled ? success : text-muted;
+                                font-size: 12px;
+                            }
+
+                            Text {
+                                text: "This will be backed by persisted settings in a later task.";
+                                color: text-muted;
+                                font-size: 11px;
+                                wrap: word-wrap;
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        Rectangle {
+            border-radius: 16px;
+            background: panel;
+            border-width: 1px;
+            border-color: border;
+            height: 48px;
+
+            HorizontalLayout {
+                padding: 12px;
+                spacing: 8px;
+
+                Rectangle {
+                    width: 10px;
+                    height: 10px;
+                    border-radius: 5px;
+                    background: accent-2;
+                }
+
+                Text {
+                    text: footer-text;
+                    color: text-muted;
+                    font-size: 12px;
+                    vertical-alignment: center;
+                }
+            }
+        }
+    }
+}
