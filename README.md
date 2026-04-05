@@ -34,15 +34,85 @@ Minimal desktop checklist for Windows and Linux, built to stay visible and keep 
 
 ## Run
 
+## Python Setup
+
+### Windows
+
+Create and activate a virtual environment:
+
+```powershell
+python -m venv .venv
+.\.venv\Scripts\Activate.ps1
+```
+
+Install packages:
+
+```powershell
+python -m pip install --upgrade pip
+python -m pip install PySide6
+```
+
+### Linux
+
+Create and activate a virtual environment:
+
+```bash
+python3 -m venv .venv
+source .venv/bin/activate
+```
+
+Install packages:
+
+```bash
+python3 -m pip install --upgrade pip
+python3 -m pip install PySide6
+```
+
+### macOS
+
+Create and activate a virtual environment:
+
+```bash
+python3 -m venv .venv
+source .venv/bin/activate
+```
+
+Install packages:
+
+```bash
+python3 -m pip install --upgrade pip
+python3 -m pip install PySide6
+```
+
+Deactivate the virtual environment when you are done:
+
+```bash
+deactivate
+```
+
 On Windows:
 
 ```powershell
 python .\focus.py
 ```
 
+PySide6 rewrite:
+
+```powershell
+python -m pip install PySide6
+python .\focus.py
+```
+
 On Linux:
 
 ```bash
+python3 ./focus.py
+```
+
+PySide6 rewrite:
+
+```bash
+python3 -m pip install PySide6
 python3 ./focus.py
 ```
 
