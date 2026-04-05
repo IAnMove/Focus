@@ -419,7 +419,7 @@ export component AppWindow inherits Window {
     property <color> border: #24314d;
     property <bool> has-current-task: current-title != "";
     property <bool> main-visible: !history-visible && !tools-visible;
-    property <bool> header-hovered: header_hover.has-hover;
+    in-out property <bool> show-header-actions: false;
 
     VerticalLayout {
         padding: 14px;
@@ -438,6 +438,14 @@ export component AppWindow inherits Window {
                 y: 0;
                 width: parent.width;
                 height: parent.height;
+
+                changed has-hover => {
+                    if (self.has-hover) {
+                        root.show-header-actions = true;
+                    } else if (!header_actions_hover.has-hover) {
+                        root.show-header-actions = false;
+                    }
+                }
             }
 
             HorizontalLayout {
@@ -463,27 +471,51 @@ export component AppWindow inherits Window {
                     }
                 }
 
-                if (root.header-hovered) : HorizontalLayout {
-                    spacing: 6px;
+                Rectangle {
+                    width: 252px;
+                    height: parent.height;
+                    background: transparent;
+                    visible: root.show-header-actions;
 
-                    Button {
-                        text: root.editing-mode ? "Editing" : "Add";
-                        clicked => { root.add-task(); }
+                    header_actions_hover := TouchArea {
+                        x: 0;
+                        y: 0;
+                        width: parent.width;
+                        height: parent.height;
+
+                        changed has-hover => {
+                            if (self.has-hover) {
+                                root.show-header-actions = true;
+                            } else if (!header_hover.has-hover) {
+                                root.show-header-actions = false;
+                            }
+                        }
                     }
 
-                    Button {
-                        text: root.history-visible ? "Back" : "History";
-                        clicked => { root.show-history(); }
-                    }
+                    HorizontalLayout {
+                        width: parent.width;
+                        height: parent.height;
+                        spacing: 6px;
 
-                    Button {
-                        text: root.tools-visible ? "Close tools" : "Tools";
-                        clicked => { root.show-tools(); }
-                    }
+                        Button {
+                            text: root.editing-mode ? "Editing" : "Add";
+                            clicked => { root.add-task(); }
+                        }
 
-                    Button {
-                        text: root.on-top-enabled ? "Pinned" : "Pin";
-                        clicked => { root.toggle-on-top(); }
+                        Button {
+                            text: root.history-visible ? "Back" : "History";
+                            clicked => { root.show-history(); }
+                        }
+
+                        Button {
+                            text: root.tools-visible ? "Close tools" : "Tools";
+                            clicked => { root.show-tools(); }
+                        }
+
+                        Button {
+                            text: root.on-top-enabled ? "Pinned" : "Pin";
+                            clicked => { root.toggle-on-top(); }
+                        }
                     }
                 }
             }
