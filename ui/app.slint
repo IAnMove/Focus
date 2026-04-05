@@ -26,6 +26,12 @@ export struct HistoryView {
     has_extra: bool,
 }
 
+export struct TabManagerView {
+    name: string,
+    priority: string,
+    can_delete: bool,
+}
+
 component TagChip inherits Rectangle {
     in property <string> label;
     in property <bool> selected;
@@ -107,6 +113,9 @@ component TaskCard inherits Rectangle {
     callback edit(task-id: int);
     callback remove(task-id: int);
     callback toggle-current(task-id: int);
+    callback move-up(task-id: int);
+    callback move-down(task-id: int);
+    callback cycle-tab(task-id: int);
 
     border-radius: 18px;
     border-width: 1px;
@@ -227,6 +236,21 @@ component TaskCard inherits Rectangle {
                 caption: "Delete";
                 clicked => { root.remove(task.id); }
             }
+
+            TaskActionButton {
+                caption: "Up";
+                clicked => { root.move-up(task.id); }
+            }
+
+            TaskActionButton {
+                caption: "Down";
+                clicked => { root.move-down(task.id); }
+            }
+
+            TaskActionButton {
+                caption: "Next tab";
+                clicked => { root.cycle-tab(task.id); }
+            }
         }
     }
 }
@@ -295,6 +319,65 @@ component HistoryCard inherits Rectangle {
     }
 }
 
+component TabManagerCard inherits Rectangle {
+    in property <TabManagerView> tab;
+    in property <color> panel;
+    in property <color> border;
+    in property <color> text-main;
+    in property <color> text-muted;
+    callback move-up(name: string);
+    callback move-down(name: string);
+    callback remove(name: string);
+
+    border-radius: 16px;
+    border-width: 1px;
+    border-color: border;
+    background: panel;
+    min-height: 82px;
+
+    VerticalLayout {
+        padding: 12px;
+        spacing: 8px;
+
+        HorizontalLayout {
+            spacing: 8px;
+
+            VerticalLayout {
+                spacing: 2px;
+                horizontal-stretch: 1;
+
+                Text {
+                    text: tab.name;
+                    color: text-main;
+                    font-size: 14px;
+                    font-weight: 700;
+                }
+
+                Text {
+                    text: "Priority: " + tab.priority;
+                    color: text-muted;
+                    font-size: 11px;
+                }
+            }
+
+            Button {
+                text: "Up";
+                clicked => { root.move-up(tab.name); }
+            }
+
+            Button {
+                text: "Down";
+                clicked => { root.move-down(tab.name); }
+            }
+
+            if (tab.can_delete) : Button {
+                text: "Delete";
+                clicked => { root.remove(tab.name); }
+            }
+        }
+    }
+}
+
 export component AppWindow inherits Window {
     in-out property <string> app-title: "focus";
     in-out property <string> status-text: "Loading";
@@ -306,15 +389,18 @@ export component AppWindow inherits Window {
     in-out property <[TabView]> tabs: [];
     in-out property <[TaskView]> tasks: [];
     in-out property <[HistoryView]> history-items: [];
+    in-out property <[TabManagerView]> managed-tabs: [];
     in-out property <int> pending-count: 0;
     in-out property <int> done-today-count: 0;
     in-out property <int> done-month-count: 0;
     in-out property <int> done-year-count: 0;
     in-out property <string> draft-title: "";
     in-out property <string> draft-extra: "";
+    in-out property <string> draft-tab-name: "";
     in-out property <bool> editing-mode: false;
     in-out property <bool> can-undo: false;
     in-out property <bool> history-visible: false;
+    in-out property <bool> tools-visible: false;
 
     callback add-task();
     callback show-history();
@@ -329,6 +415,13 @@ export component AppWindow inherits Window {
     callback toggle-current(task-id: int);
     callback undo-complete();
     callback restore-history(task-id: int);
+    callback move-task-up(task-id: int);
+    callback move-task-down(task-id: int);
+    callback cycle-task-tab(task-id: int);
+    callback submit-tab();
+    callback move-tab-up(name: string);
+    callback move-tab-down(name: string);
+    callback delete-tab(name: string);
 
     title: app-title;
     width: 460px;
@@ -397,6 +490,11 @@ export component AppWindow inherits Window {
                         }
 
                         Button {
+                            text: root.tools-visible ? "Close tools" : "Tools";
+                            clicked => { root.show-tools(); }
+                        }
+
+                        Button {
                             text: root.on-top-enabled ? "Pinned" : "Pin";
                             clicked => { root.toggle-on-top(); }
                         }
@@ -411,6 +509,7 @@ export component AppWindow inherits Window {
             border-color: root.border;
             background: root.panel;
             min-height: 126px;
+            visible: !root.history-visible && !root.tools-visible;
 
             VerticalLayout {
                 padding: 14px;
@@ -501,7 +600,7 @@ export component AppWindow inherits Window {
             border-color: root.border;
             background: root.panel;
             height: 54px;
-            visible: !root.history-visible;
+            visible: !root.history-visible && !root.tools-visible;
 
             HorizontalLayout {
                 padding: 9px;
@@ -535,7 +634,7 @@ export component AppWindow inherits Window {
             border-color: root.accent;
             background: root.panel-alt;
             min-height: 108px;
-            visible: !root.history-visible;
+            visible: !root.history-visible && !root.tools-visible;
 
             VerticalLayout {
                 padding: 16px;
@@ -584,7 +683,7 @@ export component AppWindow inherits Window {
                         horizontal-stretch: 1;
 
                         Text {
-                            text: root.history-visible ? "History" : (root.active-tab-name == "All" ? "All tasks" : root.active-tab-name);
+                            text: root.tools-visible ? "Tools" : (root.history-visible ? "History" : (root.active-tab-name == "All" ? "All tasks" : root.active-tab-name));
                             color: root.text-main;
                             font-size: 18px;
                             font-weight: 700;
@@ -620,7 +719,7 @@ export component AppWindow inherits Window {
                     background: root.border;
                 }
 
-                if (!root.history-visible && root.tasks.length == 0) : Rectangle {
+                if (!root.history-visible && !root.tools-visible && root.tasks.length == 0) : Rectangle {
                     border-radius: 18px;
                     border-width: 1px;
                     border-color: root.border;
@@ -647,7 +746,7 @@ export component AppWindow inherits Window {
                     }
                 }
 
-                if (!root.history-visible && root.tasks.length > 0) : ScrollView {
+                if (!root.history-visible && !root.tools-visible && root.tasks.length > 0) : ScrollView {
                     vertical-stretch: 1;
 
                     VerticalLayout {
@@ -666,6 +765,9 @@ export component AppWindow inherits Window {
                             edit(task-id) => { root.edit-task(task-id); }
                             remove(task-id) => { root.delete-task(task-id); }
                             toggle-current(task-id) => { root.toggle-current(task-id); }
+                            move-up(task-id) => { root.move-task-up(task-id); }
+                            move-down(task-id) => { root.move-task-down(task-id); }
+                            cycle-tab(task-id) => { root.cycle-task-tab(task-id); }
                         }
                     }
                 }
@@ -712,6 +814,56 @@ export component AppWindow inherits Window {
                             text-main: root.text-main;
                             text-muted: root.text-muted;
                             restore(task-id) => { root.restore-history(task-id); }
+                        }
+                    }
+                }
+
+                if (root.tools-visible) : ScrollView {
+                    vertical-stretch: 1;
+
+                    VerticalLayout {
+                        spacing: 12px;
+                        padding-right: 2px;
+
+                        Rectangle {
+                            border-radius: 18px;
+                            border-width: 1px;
+                            border-color: root.border;
+                            background: root.panel-soft;
+                            min-height: 118px;
+
+                            VerticalLayout {
+                                padding: 14px;
+                                spacing: 8px;
+
+                                Text {
+                                    text: "Add tab";
+                                    color: root.text-main;
+                                    font-size: 15px;
+                                    font-weight: 700;
+                                }
+
+                                LineEdit {
+                                    text <=> root.draft-tab-name;
+                                    placeholder-text: "New tab name";
+                                }
+
+                                Button {
+                                    text: "Create tab";
+                                    clicked => { root.submit-tab(); }
+                                }
+                            }
+                        }
+
+                        for tab[index] in root.managed-tabs : TabManagerCard {
+                            tab: tab;
+                            panel: index % 2 == 0 ? root.panel-soft : root.panel;
+                            border: root.border;
+                            text-main: root.text-main;
+                            text-muted: root.text-muted;
+                            move-up(name) => { root.move-tab-up(name); }
+                            move-down(name) => { root.move-tab-down(name); }
+                            remove(name) => { root.delete-tab(name); }
                         }
                     }
                 }

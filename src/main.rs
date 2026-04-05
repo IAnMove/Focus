@@ -15,8 +15,10 @@ struct AppState {
     data: model::AppData,
     active_tab: String,
     history_visible: bool,
+    tools_visible: bool,
     draft_title: String,
     draft_extra: String,
+    draft_tab_name: String,
     editing_task_id: Option<u64>,
     undo_item: Option<model::TaskItem>,
     store: Option<storage::DataStore>,
@@ -28,8 +30,10 @@ impl AppState {
             data,
             active_tab: "All".to_string(),
             history_visible: false,
+            tools_visible: false,
             draft_title: String::new(),
             draft_extra: String::new(),
+            draft_tab_name: String::new(),
             editing_task_id: None,
             undo_item: None,
             store,
@@ -46,6 +50,10 @@ impl AppState {
         self.draft_title.clear();
         self.draft_extra.clear();
         self.editing_task_id = None;
+    }
+
+    fn clear_tab_draft(&mut self) {
+        self.draft_tab_name.clear();
     }
 
     fn submit_draft(&mut self) -> bool {
@@ -175,10 +183,21 @@ impl AppState {
     fn select_tab(&mut self, name: String) {
         self.active_tab = name;
         self.history_visible = false;
+        self.tools_visible = false;
     }
 
     fn toggle_history(&mut self) {
         self.history_visible = !self.history_visible;
+        if self.history_visible {
+            self.tools_visible = false;
+        }
+    }
+
+    fn toggle_tools(&mut self) {
+        self.tools_visible = !self.tools_visible;
+        if self.tools_visible {
+            self.history_visible = false;
+        }
     }
 
     fn restore_history(&mut self, task_id: u64) -> bool {
@@ -192,6 +211,108 @@ impl AppState {
         item.completed_at.clear();
         self.data.active.push(item);
         self.history_visible = false;
+        self.save();
+        true
+    }
+
+    fn move_task(&mut self, task_id: u64, delta: isize) -> bool {
+        let Some(index) = self.data.active.iter().position(|task| task.id == task_id) else {
+            return false;
+        };
+
+        let target = index as isize + delta;
+        if target < 0 || target >= self.data.active.len() as isize {
+            return false;
+        }
+
+        self.data.active.swap(index, target as usize);
+        self.save();
+        true
+    }
+
+    fn cycle_task_tab(&mut self, task_id: u64) -> bool {
+        let tabs = &self.data.settings.tabs;
+        if tabs.is_empty() {
+            return false;
+        }
+
+        let Some(task) = self.data.active.iter_mut().find(|task| task.id == task_id) else {
+            return false;
+        };
+
+        let current_index = tabs
+            .iter()
+            .position(|tab| tab.name == task.tab)
+            .unwrap_or(0);
+        let next_index = (current_index + 1) % tabs.len();
+        task.tab = tabs[next_index].name.clone();
+        self.save();
+        true
+    }
+
+    fn submit_tab(&mut self) -> bool {
+        let name = model::normalize_tab_name(&self.draft_tab_name);
+        if name.is_empty() || self.data.settings.tabs.iter().any(|tab| tab.name == name) {
+            return false;
+        }
+
+        self.data.settings.tabs.push(model::TabSpec {
+            name: name.clone(),
+            priority: model::TabPriority::Normal,
+        });
+        self.active_tab = name;
+        self.clear_tab_draft();
+        self.save();
+        true
+    }
+
+    fn move_tab(&mut self, name: &str, delta: isize) -> bool {
+        let Some(index) = self
+            .data
+            .settings
+            .tabs
+            .iter()
+            .position(|tab| tab.name == name)
+        else {
+            return false;
+        };
+
+        let target = index as isize + delta;
+        if target < 0 || target >= self.data.settings.tabs.len() as isize {
+            return false;
+        }
+
+        self.data.settings.tabs.swap(index, target as usize);
+        self.save();
+        true
+    }
+
+    fn delete_tab(&mut self, name: &str) -> bool {
+        if name == model::GENERAL_TAB_NAME {
+            return false;
+        }
+
+        let before = self.data.settings.tabs.len();
+        self.data.settings.tabs.retain(|tab| tab.name != name);
+        if self.data.settings.tabs.len() == before {
+            return false;
+        }
+
+        for task in self
+            .data
+            .active
+            .iter_mut()
+            .chain(self.data.history.iter_mut())
+        {
+            if task.tab == name {
+                task.tab = model::GENERAL_TAB_NAME.to_string();
+            }
+        }
+
+        if self.active_tab == name {
+            self.active_tab = "All".to_string();
+        }
+
         self.save();
         true
     }
@@ -366,6 +487,16 @@ fn bind_callbacks(app: &AppWindow, state: Rc<RefCell<AppState>>, undo_timer: Rc<
         }
     });
 
+    app.on_show_tools({
+        let app_weak = app_weak.clone();
+        let state = state.clone();
+        move || {
+            let mut state = state.borrow_mut();
+            state.toggle_tools();
+            refresh_if_possible(&app_weak, &state);
+        }
+    });
+
     app.on_restore_history({
         let app_weak = app_weak.clone();
         let state = state.clone();
@@ -377,7 +508,82 @@ fn bind_callbacks(app: &AppWindow, state: Rc<RefCell<AppState>>, undo_timer: Rc<
         }
     });
 
-    app.on_show_tools(|| {});
+    app.on_move_task_up({
+        let app_weak = app_weak.clone();
+        let state = state.clone();
+        move |task_id| {
+            let mut state = state.borrow_mut();
+            if state.move_task(task_id as u64, -1) {
+                refresh_if_possible(&app_weak, &state);
+            }
+        }
+    });
+
+    app.on_move_task_down({
+        let app_weak = app_weak.clone();
+        let state = state.clone();
+        move |task_id| {
+            let mut state = state.borrow_mut();
+            if state.move_task(task_id as u64, 1) {
+                refresh_if_possible(&app_weak, &state);
+            }
+        }
+    });
+
+    app.on_cycle_task_tab({
+        let app_weak = app_weak.clone();
+        let state = state.clone();
+        move |task_id| {
+            let mut state = state.borrow_mut();
+            if state.cycle_task_tab(task_id as u64) {
+                refresh_if_possible(&app_weak, &state);
+            }
+        }
+    });
+
+    app.on_submit_tab({
+        let app_weak = app_weak.clone();
+        let state = state.clone();
+        move || {
+            let mut state = state.borrow_mut();
+            if state.submit_tab() {
+                refresh_if_possible(&app_weak, &state);
+            }
+        }
+    });
+
+    app.on_move_tab_up({
+        let app_weak = app_weak.clone();
+        let state = state.clone();
+        move |name| {
+            let mut state = state.borrow_mut();
+            if state.move_tab(name.as_str(), -1) {
+                refresh_if_possible(&app_weak, &state);
+            }
+        }
+    });
+
+    app.on_move_tab_down({
+        let app_weak = app_weak.clone();
+        let state = state.clone();
+        move |name| {
+            let mut state = state.borrow_mut();
+            if state.move_tab(name.as_str(), 1) {
+                refresh_if_possible(&app_weak, &state);
+            }
+        }
+    });
+
+    app.on_delete_tab({
+        let app_weak = app_weak.clone();
+        let state = state.clone();
+        move |name| {
+            let mut state = state.borrow_mut();
+            if state.delete_tab(name.as_str()) {
+                refresh_if_possible(&app_weak, &state);
+            }
+        }
+    });
 }
 
 fn refresh_if_possible(app_weak: &Weak<AppWindow>, state: &AppState) {
@@ -390,6 +596,7 @@ fn refresh_ui(app: &AppWindow, state: &AppState) {
     let tabs = build_tab_views(&state.data, &state.active_tab);
     let tasks = build_task_views(&state.data, &state.active_tab);
     let history_items = build_history_views(&state.data);
+    let managed_tabs = build_managed_tabs(&state.data);
     let current = current_task(&state.data);
     let (done_today, done_month, done_year) = completion_counts(&state.data);
 
@@ -411,13 +618,16 @@ fn refresh_ui(app: &AppWindow, state: &AppState) {
     app.set_tabs(ModelRc::new(VecModel::from(tabs)));
     app.set_tasks(ModelRc::new(VecModel::from(tasks)));
     app.set_history_items(ModelRc::new(VecModel::from(history_items)));
+    app.set_managed_tabs(ModelRc::new(VecModel::from(managed_tabs)));
     app.set_current_title(current.0.into());
     app.set_current_meta(current.1.into());
     app.set_draft_title(state.draft_title.clone().into());
     app.set_draft_extra(state.draft_extra.clone().into());
+    app.set_draft_tab_name(state.draft_tab_name.clone().into());
     app.set_editing_mode(state.editing_task_id.is_some());
     app.set_can_undo(state.undo_item.is_some());
     app.set_history_visible(state.history_visible);
+    app.set_tools_visible(state.tools_visible);
 }
 
 fn build_tab_views(data: &model::AppData, active_tab: &str) -> Vec<TabView> {
@@ -473,6 +683,18 @@ fn build_history_views(data: &model::AppData) -> Vec<HistoryView> {
             meta: history_meta(task).into(),
             extra: task.extra_info.clone().into(),
             has_extra: !task.extra_info.trim().is_empty(),
+        })
+        .collect()
+}
+
+fn build_managed_tabs(data: &model::AppData) -> Vec<TabManagerView> {
+    data.settings
+        .tabs
+        .iter()
+        .map(|tab| TabManagerView {
+            name: tab.name.clone().into(),
+            priority: format!("{:?}", tab.priority).to_lowercase().into(),
+            can_delete: tab.name != model::GENERAL_TAB_NAME,
         })
         .collect()
 }
