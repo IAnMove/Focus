@@ -31,22 +31,7 @@ impl DataStore {
             return defaults;
         }
 
-        let raw = match fs::read_to_string(&self.path) {
-            Ok(raw) => raw,
-            Err(_) => return defaults,
-        };
-
-        match serde_json::from_str::<AppData>(&raw) {
-            Ok(data) => {
-                let normalized = data.normalized();
-                if normalized.active.is_empty() {
-                    defaults
-                } else {
-                    normalized
-                }
-            }
-            Err(_) => defaults,
-        }
+        load_data_from_path(&self.path).unwrap_or(defaults)
     }
 
     pub fn save(&self, data: &AppData) -> io::Result<()> {
@@ -66,6 +51,33 @@ impl DataStore {
 
 pub fn now_stamp() -> String {
     Local::now().format("%Y-%m-%d %H:%M").to_string()
+}
+
+pub fn load_data_from_path(path: &PathBuf) -> io::Result<AppData> {
+    let raw = fs::read_to_string(path)?;
+    let data: AppData = serde_json::from_str(&raw)
+        .map_err(|error| io::Error::new(io::ErrorKind::InvalidData, error))?;
+    Ok(data.normalized())
+}
+
+pub fn save_data_to_path(path: &PathBuf, data: &AppData) -> io::Result<()> {
+    if let Some(parent) = path.parent() {
+        fs::create_dir_all(parent)?;
+    }
+
+    let mut normalized = data.clone().normalized();
+    normalized.history.truncate(250);
+
+    let payload = serde_json::to_string_pretty(&normalized)
+        .map_err(|error| io::Error::new(io::ErrorKind::InvalidData, error))?;
+
+    fs::write(path, payload)
+}
+
+pub fn default_export_path() -> PathBuf {
+    home_dir()
+        .unwrap_or_else(env::temp_dir)
+        .join("focus-export.json")
 }
 
 fn data_file_path() -> io::Result<PathBuf> {

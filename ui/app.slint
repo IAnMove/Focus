@@ -397,6 +397,8 @@ export component AppWindow inherits Window {
     in-out property <string> draft-title: "";
     in-out property <string> draft-extra: "";
     in-out property <string> draft-tab-name: "";
+    in-out property <string> transfer-path: "";
+    in-out property <string> tools-message: "";
     in-out property <bool> editing-mode: false;
     in-out property <bool> can-undo: false;
     in-out property <bool> history-visible: false;
@@ -422,6 +424,8 @@ export component AppWindow inherits Window {
     callback move-tab-up(name: string);
     callback move-tab-down(name: string);
     callback delete-tab(name: string);
+    callback import-data();
+    callback export-data();
 
     title: app-title;
     width: 460px;
@@ -849,6 +853,52 @@ export component AppWindow inherits Window {
                                 Button {
                                     text: "Create tab";
                                     clicked => { root.submit-tab(); }
+                                }
+                            }
+                        }
+
+                        Rectangle {
+                            border-radius: 18px;
+                            border-width: 1px;
+                            border-color: root.border;
+                            background: root.panel-soft;
+                            min-height: 154px;
+
+                            VerticalLayout {
+                                padding: 14px;
+                                spacing: 8px;
+
+                                Text {
+                                    text: "Import / Export";
+                                    color: root.text-main;
+                                    font-size: 15px;
+                                    font-weight: 700;
+                                }
+
+                                LineEdit {
+                                    text <=> root.transfer-path;
+                                    placeholder-text: "Path to JSON file";
+                                }
+
+                                HorizontalLayout {
+                                    spacing: 8px;
+
+                                    Button {
+                                        text: "Import";
+                                        clicked => { root.import-data(); }
+                                    }
+
+                                    Button {
+                                        text: "Export";
+                                        clicked => { root.export-data(); }
+                                    }
+                                }
+
+                                Text {
+                                    text: root.tools-message;
+                                    color: root.text-muted;
+                                    wrap: word-wrap;
+                                    font-size: 12px;
                                 }
                             }
                         }

@@ -2,6 +2,7 @@ mod model;
 mod storage;
 
 use std::cell::RefCell;
+use std::path::PathBuf;
 use std::rc::Rc;
 use std::time::Duration;
 
@@ -20,6 +21,8 @@ struct AppState {
     draft_title: String,
     draft_extra: String,
     draft_tab_name: String,
+    transfer_path: String,
+    tools_message: String,
     editing_task_id: Option<u64>,
     undo_item: Option<model::TaskItem>,
     store: Option<storage::DataStore>,
@@ -35,6 +38,8 @@ impl AppState {
             draft_title: String::new(),
             draft_extra: String::new(),
             draft_tab_name: String::new(),
+            transfer_path: storage::default_export_path().display().to_string(),
+            tools_message: String::new(),
             editing_task_id: None,
             undo_item: None,
             store,
@@ -55,6 +60,10 @@ impl AppState {
 
     fn clear_tab_draft(&mut self) {
         self.draft_tab_name.clear();
+    }
+
+    fn set_tools_message(&mut self, message: impl Into<String>) {
+        self.tools_message = message.into();
     }
 
     fn submit_draft(&mut self) -> bool {
@@ -316,6 +325,50 @@ impl AppState {
 
         self.save();
         true
+    }
+
+    fn import_data(&mut self) -> bool {
+        let path = self.transfer_path.trim().to_string();
+        if path.is_empty() {
+            self.set_tools_message("Enter a JSON path to import.");
+            return false;
+        }
+
+        match storage::load_data_from_path(&PathBuf::from(&path)) {
+            Ok(data) => {
+                self.data = data;
+                self.active_tab = "All".to_string();
+                self.history_visible = false;
+                self.tools_visible = true;
+                self.clear_draft();
+                self.set_tools_message(format!("Imported data from {}", path));
+                self.save();
+                true
+            }
+            Err(error) => {
+                self.set_tools_message(format!("Import failed: {}", error));
+                false
+            }
+        }
+    }
+
+    fn export_data(&mut self) -> bool {
+        let path = self.transfer_path.trim();
+        if path.is_empty() {
+            self.transfer_path = storage::default_export_path().display().to_string();
+        }
+
+        let export_path = PathBuf::from(self.transfer_path.trim());
+        match storage::save_data_to_path(&export_path, &self.data) {
+            Ok(()) => {
+                self.set_tools_message(format!("Exported data to {}", export_path.display()));
+                true
+            }
+            Err(error) => {
+                self.set_tools_message(format!("Export failed: {}", error));
+                false
+            }
+        }
     }
 }
 
@@ -586,6 +639,26 @@ fn bind_callbacks(app: &AppWindow, state: Rc<RefCell<AppState>>, undo_timer: Rc<
             }
         }
     });
+
+    app.on_import_data({
+        let app_weak = app_weak.clone();
+        let state = state.clone();
+        move || {
+            let mut state = state.borrow_mut();
+            state.import_data();
+            refresh_if_possible(&app_weak, &state);
+        }
+    });
+
+    app.on_export_data({
+        let app_weak = app_weak.clone();
+        let state = state.clone();
+        move || {
+            let mut state = state.borrow_mut();
+            state.export_data();
+            refresh_if_possible(&app_weak, &state);
+        }
+    });
 }
 
 fn refresh_if_possible(app_weak: &Weak<AppWindow>, state: &AppState) {
@@ -638,6 +711,8 @@ fn refresh_ui(app: &AppWindow, state: &AppState) {
     app.set_draft_title(state.draft_title.clone().into());
     app.set_draft_extra(state.draft_extra.clone().into());
     app.set_draft_tab_name(state.draft_tab_name.clone().into());
+    app.set_transfer_path(state.transfer_path.clone().into());
+    app.set_tools_message(state.tools_message.clone().into());
     app.set_editing_mode(state.editing_task_id.is_some());
     app.set_can_undo(state.undo_item.is_some());
     app.set_history_visible(state.history_visible);
