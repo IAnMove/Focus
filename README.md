@@ -1,145 +1,83 @@
 # focus
 
-Minimal desktop checklist for Windows and Linux, built to stay visible and keep the current task in front of you.
+Checklist desktop nativa en Rust + Slint.
 
-## Features
+## Estado
 
-- Normal desktop window with taskbar presence.
+La migracion principal desde `focus.py` ya esta operativa. La app actual usa Slint con backend `winit`, render nativo acelerado y persistencia JSON compatible con la estructura de datos existente.
+
+## Funcionalidad disponible
+
+- Ventana nativa con renderizado GPU via Slint.
+- Toggle de `always on top` persistido.
+- Lista principal separada de `History` y `Tools`.
+- Crear, editar, completar, deshacer, eliminar y marcar tarea `current`.
+- Historial con restauracion.
+- Tabs con filtro `All`.
+- Gestion de tabs desde `Tools`.
+- Reordenamiento de tareas con `Up` y `Down`.
+- Reordenamiento y borrado de tabs.
+- Importacion y exportacion JSON por ruta.
+- Persistencia de `active`, `history` y `settings`.
+
+## Diferencias respecto a focus.py
+
+Estas partes del script original todavia no estan portadas:
+
 - Hover-first header controls.
-- Always-on-top toggle.
-- Add, edit, delete, reorder, and complete tasks.
-- Single `current` task mode that moves the task to the top.
-- One tab/label per task.
-- Tab filtering with `All` view.
-- Tab priority levels: `high`, `normal`, `low`.
-- Tab management from `tools`.
-- Tab reordering controls.
-- Clickable `http://` and `https://` links inside tasks.
-- Due date picker with optional time.
-- Small remaining-time text next to due date.
-- Minimal due-date progress bar based on creation time to deadline.
-- Completion animation with 3-second undo.
-- History with restore.
-- Optional hidden `extra info` per task.
-- Footer stats for pending, done today, this month, and this year.
-- Export and import full JSON data.
-- Saved metadata: `created_at`, `completed_at`, `due_date`, `extra_info`, `tab`.
-- Startup toggle for Windows and Linux.
-- Theme presets: `warm`, `forest`, `ocean`, `rose`.
-- Custom color theme editor with live preview squares.
-- Font size controls.
-- Accessibility toggle.
-- Scrollable `tools` panel.
-- Settings persistence between sessions.
+- Drag and drop real para reordenar.
+- Selector completo de fecha de vencimiento y edicion de `due_date`.
+- Tema visual configurable, presets y editor de colores.
+- Font scale, accessibility mode y toggle de metadatos.
+- Startup on login.
+- Links clicables dentro del texto de la tarea.
+- Sonidos y animaciones del completado.
 
-## Run
+## Ejecutar
 
-## Python Setup
-
-### Windows
-
-Create and activate a virtual environment:
+En desarrollo:
 
 ```powershell
-python -m venv .venv
-.\.venv\Scripts\Activate.ps1
+cargo run
 ```
 
-Install packages:
+Build release:
 
 ```powershell
-python -m pip install --upgrade pip
-python -m pip install PySide6
+cargo run --release
 ```
 
-### Linux
-
-Create and activate a virtual environment:
-
-```bash
-python3 -m venv .venv
-source .venv/bin/activate
-```
-
-Install packages:
-
-```bash
-python3 -m pip install --upgrade pip
-python3 -m pip install PySide6
-```
-
-### macOS
-
-Create and activate a virtual environment:
-
-```bash
-python3 -m venv .venv
-source .venv/bin/activate
-```
-
-Install packages:
-
-```bash
-python3 -m pip install --upgrade pip
-python3 -m pip install PySide6
-```
-
-Deactivate the virtual environment when you are done:
-
-```bash
-deactivate
-```
-
-On Windows:
+Compilar sin ejecutar:
 
 ```powershell
-python .\focus.py
+cargo build
 ```
 
-PySide6 rewrite:
+## Dependencias
 
-```powershell
-python -m pip install PySide6
-python .\focus.py
-```
+Las dependencias clave estan documentadas en [Cargo.toml](/i:/focus/Cargo.toml):
 
-On Linux:
+- `slint`: UI nativa y acceso a `winit`.
+- `slint-build`: compilacion de `ui/app.slint`.
+- `serde` y `serde_json`: modelos y persistencia JSON.
+- `chrono`: timestamps y contadores temporales.
 
-```bash
-python3 ./focus.py
-```
+## Estructura
 
-PySide6 rewrite:
+- [src/main.rs](/i:/focus/src/main.rs): estado de la app, callbacks y wiring UI.
+- [src/model.rs](/i:/focus/src/model.rs): modelos y normalizacion de datos.
+- [src/storage.rs](/i:/focus/src/storage.rs): persistencia, import/export y rutas.
+- [ui/app.slint](/i:/focus/ui/app.slint): interfaz Slint.
 
-```bash
-python3 -m pip install PySide6
-python3 ./focus.py
-```
-
-## Build
-
-On Windows:
-
-```powershell
-.\build_windows.ps1
-```
-
-Expected output: `dist\focus.exe`
-
-On Linux:
-
-```bash
-chmod +x ./build_linux.sh
-./build_linux.sh
-```
-
-Expected output: `dist/focus`
-
-## Data
+## Datos
 
 Windows:
 
-`%USERPROFILE%\AppData\Roaming\focus\checklist.json`
+`%APPDATA%\focus\checklist.json`
+
+macOS:
+
+`~/Library/Application Support/focus/checklist.json`
 
 Linux:
 
