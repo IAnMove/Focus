@@ -18,6 +18,7 @@ struct AppState {
     active_tab: String,
     history_visible: bool,
     tools_visible: bool,
+    draft_visible: bool,
     draft_title: String,
     draft_extra: String,
     draft_tab_name: String,
@@ -35,6 +36,7 @@ impl AppState {
             active_tab: "All".to_string(),
             history_visible: false,
             tools_visible: false,
+            draft_visible: false,
             draft_title: String::new(),
             draft_extra: String::new(),
             draft_tab_name: String::new(),
@@ -56,6 +58,7 @@ impl AppState {
         self.draft_title.clear();
         self.draft_extra.clear();
         self.editing_task_id = None;
+        self.draft_visible = false;
     }
 
     fn clear_tab_draft(&mut self) {
@@ -99,6 +102,9 @@ impl AppState {
             self.editing_task_id = Some(task_id);
             self.draft_title = task.text.clone();
             self.draft_extra = task.extra_info.clone();
+            self.draft_visible = true;
+            self.history_visible = false;
+            self.tools_visible = false;
         }
     }
 
@@ -200,6 +206,7 @@ impl AppState {
         self.history_visible = !self.history_visible;
         if self.history_visible {
             self.tools_visible = false;
+            self.draft_visible = false;
         }
     }
 
@@ -207,6 +214,7 @@ impl AppState {
         self.tools_visible = !self.tools_visible;
         if self.tools_visible {
             self.history_visible = false;
+            self.draft_visible = false;
         }
     }
 
@@ -411,6 +419,9 @@ fn bind_callbacks(app: &AppWindow, state: Rc<RefCell<AppState>>, undo_timer: Rc<
         move || {
             let mut state = state.borrow_mut();
             state.clear_draft();
+            state.draft_visible = true;
+            state.history_visible = false;
+            state.tools_visible = false;
             refresh_if_possible(&app_weak, &state);
         }
     });
@@ -714,6 +725,7 @@ fn refresh_ui(app: &AppWindow, state: &AppState) {
     app.set_transfer_path(state.transfer_path.clone().into());
     app.set_tools_message(state.tools_message.clone().into());
     app.set_editing_mode(state.editing_task_id.is_some());
+    app.set_draft_visible(state.draft_visible);
     app.set_can_undo(state.undo_item.is_some());
     app.set_history_visible(state.history_visible);
     app.set_tools_visible(state.tools_visible);

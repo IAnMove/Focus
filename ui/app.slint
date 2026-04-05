@@ -62,40 +62,6 @@ component TagChip inherits Rectangle {
     }
 }
 
-component MetricPill inherits Rectangle {
-    in property <string> label;
-    in property <int> value;
-    in property <color> panel;
-    in property <color> border;
-    in property <color> text-main;
-    in property <color> text-muted;
-
-    min-width: 84px;
-    height: 52px;
-    border-radius: 16px;
-    border-width: 1px;
-    border-color: border;
-    background: panel;
-
-    VerticalLayout {
-        padding: 10px;
-        spacing: 2px;
-
-        Text {
-            text: label;
-            color: text-muted;
-            font-size: 11px;
-        }
-
-        Text {
-            text: value + "";
-            color: text-main;
-            font-size: 18px;
-            font-weight: 700;
-        }
-    }
-}
-
 component TaskActionButton inherits Button {
     in property <string> caption;
     text: caption;
@@ -400,6 +366,7 @@ export component AppWindow inherits Window {
     in-out property <string> transfer-path: "";
     in-out property <string> tools-message: "";
     in-out property <bool> editing-mode: false;
+    in-out property <bool> draft-visible: false;
     in-out property <bool> can-undo: false;
     in-out property <bool> history-visible: false;
     in-out property <bool> tools-visible: false;
@@ -511,7 +478,7 @@ export component AppWindow inherits Window {
             border-color: root.border;
             background: root.panel;
             min-height: 126px;
-            visible: !root.history-visible && !root.tools-visible;
+            visible: root.draft-visible && !root.history-visible && !root.tools-visible;
 
             VerticalLayout {
                 padding: 14px;
@@ -556,46 +523,6 @@ export component AppWindow inherits Window {
             }
         }
 
-        HorizontalLayout {
-            spacing: 8px;
-
-            MetricPill {
-                label: "Pending";
-                value: root.pending-count;
-                panel: root.panel;
-                border: root.border;
-                text-main: root.text-main;
-                text-muted: root.text-muted;
-            }
-
-            MetricPill {
-                label: "Today";
-                value: root.done-today-count;
-                panel: root.panel;
-                border: root.border;
-                text-main: root.text-main;
-                text-muted: root.text-muted;
-            }
-
-            MetricPill {
-                label: "Month";
-                value: root.done-month-count;
-                panel: root.panel;
-                border: root.border;
-                text-main: root.text-main;
-                text-muted: root.text-muted;
-            }
-
-            MetricPill {
-                label: "Year";
-                value: root.done-year-count;
-                panel: root.panel;
-                border: root.border;
-                text-main: root.text-main;
-                text-muted: root.text-muted;
-            }
-        }
-
         Rectangle {
             border-radius: 20px;
             border-width: 1px;
@@ -608,16 +535,6 @@ export component AppWindow inherits Window {
                 padding: 9px;
                 spacing: 8px;
 
-                TagChip {
-                    label: "Tools";
-                    selected: false;
-                    accent: root.accent-warm;
-                    panel: root.panel-soft;
-                    text-main: root.text-main;
-                    text-muted: root.text-muted;
-                    pressed => { root.show-tools(); }
-                }
-
                 for tab in root.tabs : TagChip {
                     label: tab.name;
                     selected: tab.selected;
@@ -626,42 +543,6 @@ export component AppWindow inherits Window {
                     text-main: root.text-main;
                     text-muted: root.text-muted;
                     pressed => { root.select-tab(tab.name); }
-                }
-            }
-        }
-
-        if (root.has-current-task) : Rectangle {
-            border-radius: 24px;
-            border-width: 1px;
-            border-color: root.accent;
-            background: root.panel-alt;
-            min-height: 108px;
-            visible: !root.history-visible && !root.tools-visible;
-
-            VerticalLayout {
-                padding: 16px;
-                spacing: 6px;
-
-                Text {
-                    text: "Current task";
-                    color: root.accent;
-                    font-size: 12px;
-                    font-weight: 800;
-                }
-
-                Text {
-                    text: root.current-title;
-                    color: root.text-main;
-                    wrap: word-wrap;
-                    font-size: 20px;
-                    font-weight: 700;
-                }
-
-                Text {
-                    text: root.current-meta;
-                    color: root.text-muted;
-                    wrap: word-wrap;
-                    font-size: 12px;
                 }
             }
         }
@@ -685,14 +566,14 @@ export component AppWindow inherits Window {
                         horizontal-stretch: 1;
 
                         Text {
-                            text: root.tools-visible ? "Tools" : (root.history-visible ? "History" : (root.active-tab-name == "All" ? "All tasks" : root.active-tab-name));
+                            text: root.tools-visible ? "Tools" : (root.history-visible ? "History" : (root.active-tab-name == "All" ? "Tasks" : root.active-tab-name));
                             color: root.text-main;
                             font-size: 18px;
                             font-weight: 700;
                         }
 
                         Text {
-                            text: root.footer-text;
+                            text: root.tools-visible ? "Configuration and data management" : (root.history-visible ? "Completed tasks" : root.footer-text);
                             color: root.text-muted;
                             font-size: 12px;
                             wrap: word-wrap;
@@ -704,11 +585,12 @@ export component AppWindow inherits Window {
                         height: 40px;
                         border-radius: 20px;
                         background: root.accent-warm;
+                        visible: !root.tools-visible;
 
                         Text {
                             x: (parent.width - self.width) / 2;
                             y: (parent.height - self.height) / 2;
-                            text: root.pending-count + "";
+                            text: root.history-visible ? root.done-year-count + "" : root.pending-count + "";
                             color: #111827;
                             font-size: 16px;
                             font-weight: 800;
