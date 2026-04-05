@@ -59,7 +59,7 @@ Portar la aplicacion actual de checklist en Python a Rust usando Slint, mantenie
 - [x] 1. Analizar `focus.py` y documentar la funcionalidad a conservar.
 - [x] 2. Crear el proyecto Rust base con `Cargo.toml`, `src/main.rs` y `ui/app.slint`.
 - [x] 3. Definir los modelos Rust para tareas, tabs y settings, con serializacion JSON.
-- [ ] 4. Implementar la capa de persistencia y carga inicial compatible con el JSON actual.
+- [x] 4. Implementar la capa de persistencia y carga inicial compatible con el JSON actual.
 - [ ] 5. Disenar la UI principal en Slint para lista, cabecera, tabs y footer.
 - [ ] 6. Conectar agregar, editar, completar, deshacer, eliminar y marcar `current`.
 - [ ] 7. Implementar historial y restauracion de tareas.
@@ -76,4 +76,4 @@ Portar la aplicacion actual de checklist en Python a Rust usando Slint, mantenie
 - Hacer un commit por cada tarea completada.
 
 ## Siguiente paso
-Tarea 4: implementar la capa de persistencia y carga inicial compatible con el JSON actual.
+Tarea 5: disenar la UI principal en Slint para lista, cabecera, tabs y footer.

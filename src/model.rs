@@ -3,8 +3,14 @@ use std::collections::{BTreeMap, BTreeSet};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
+pub const APP_NAME: &str = "focus";
 pub const DEFAULT_THEME_NAME: &str = "warm";
 pub const GENERAL_TAB_NAME: &str = "General";
+pub const DEFAULT_ITEM_TEXTS: [&str; 3] = [
+    "Define the next concrete task",
+    "Finish what is already in progress",
+    "Avoid switching context without reason",
+];
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Default)]
 #[serde(rename_all = "lowercase")]
@@ -194,6 +200,24 @@ pub struct AppData {
 }
 
 impl AppData {
+    pub fn with_default_items(created_at: &str) -> Self {
+        let active = DEFAULT_ITEM_TEXTS
+            .iter()
+            .enumerate()
+            .map(|(index, text)| {
+                let mut item = TaskItem::new(index as u64 + 1, *text);
+                item.created_at = created_at.to_string();
+                item
+            })
+            .collect();
+
+        Self {
+            active,
+            history: Vec::new(),
+            settings: Settings::default(),
+        }
+    }
+
     pub fn normalized(mut self) -> Self {
         self.active = self
             .active
@@ -370,5 +394,15 @@ mod tests {
         assert_eq!(normalized.active[0].text, "Define the next concrete task");
         assert_eq!(normalized.settings.tabs[0].name, GENERAL_TAB_NAME);
         assert!(normalized.settings.always_on_top);
+    }
+
+    #[test]
+    fn builds_default_items_payload() {
+        let data = AppData::with_default_items("2026-04-05 12:00");
+
+        assert_eq!(data.active.len(), 3);
+        assert_eq!(data.active[0].id, 1);
+        assert_eq!(data.active[0].created_at, "2026-04-05 12:00");
+        assert_eq!(data.settings.tabs[0].name, GENERAL_TAB_NAME);
     }
 }
