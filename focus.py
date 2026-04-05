@@ -13,7 +13,7 @@ import webbrowser
 from datetime import datetime
 from pathlib import Path
 
-from PySide6.QtCore import QDateTime, QEvent, QPointF, QTimer, Qt, Signal
+from PySide6.QtCore import QDateTime, QEvent, QPointF, QSize, QTimer, Qt, Signal
 from PySide6.QtWidgets import (
     QApplication,
     QCheckBox,
@@ -37,12 +37,16 @@ from PySide6.QtWidgets import (
     QScrollArea,
     QSpinBox,
     QStackedWidget,
+    QSizePolicy,
     QVBoxLayout,
     QWidget,
 )
 
 
 APP_NAME = "focus"
+APP_VERSION = "0.1.0"
+BUILD_REPO_URL = "https://github.com/IAnMove/Focus"
+BUILD_COMMIT = "98f1010"
 TAB_PRIORITY_ORDER = {"high": 0, "normal": 1, "low": 2}
 THEME_KEYS = ["BG", "CARD", "CARD_ALT", "TEXT", "MUTED", "ACCENT", "BORDER", "PROGRESS_BG", "PROGRESS_FILL"]
 THEME_PRESETS = {
@@ -110,6 +114,13 @@ DEFAULT_ITEMS = [
 URL_RE = re.compile(r"(https?://[^\s]+)")
 
 IS_WINDOWS = platform.system() == "Windows"
+HEADER_MIN_WIDTH = 360
+HEADER_COMPACT_WIDTH = 500
+TASK_POPUP_WIDTH = 360
+TASK_COMPACT_WIDTH = 560
+FOOTER_COMPACT_WIDTH = 520
+RESIZE_SETTLE_MS = 140
+ROW_DEBUG_LOGS = False
 
 
 def _make_wav(tones: list[tuple[float, float]], volume: float = 0.32, sample_rate: int = 44100) -> bytes:
@@ -162,6 +173,18 @@ def play_add() -> None:
 
 def now_stamp() -> str:
     return datetime.now().strftime("%Y-%m-%d %H:%M")
+
+
+def debug_stamp() -> str:
+    return datetime.now().strftime("%H:%M:%S.%f")[:-3]
+
+
+def debug_log(event: str, **values) -> None:
+    details = " ".join(f"{key}={value}" for key, value in values.items())
+    message = f"[{debug_stamp()}] {event}"
+    if details:
+        message = f"{message} {details}"
+    print(message, file=sys.stderr, flush=True)
 
 
 def get_data_path() -> Path:
@@ -488,55 +511,224 @@ class ColorPreview(QFrame):
         self.setStyleSheet(f"background:{color}; border:1px solid #999; border-radius:4px;")
 
 
+class AboutDialog(QDialog):
+    def __init__(self, parent: QWidget) -> None:
+        super().__init__(parent)
+        self.setWindowTitle("About focus")
+        self.setModal(True)
+        self.resize(420, 220)
+
+        layout = QVBoxLayout(self)
+        title = QLabel(APP_NAME)
+        title.setObjectName("titleLabel")
+        subtitle = QLabel("Minimal desktop checklist")
+        subtitle.setObjectName("sectionTitle")
+
+        repo = QLabel(f'<a href="{BUILD_REPO_URL}">{BUILD_REPO_URL}</a>')
+        repo.setOpenExternalLinks(True)
+        repo.setTextInteractionFlags(Qt.TextBrowserInteraction)
+
+        info = QLabel(
+            f"Version: {APP_VERSION}<br>"
+            f"Commit: {BUILD_COMMIT}<br>"
+            f"Generated from: {BUILD_REPO_URL}"
+        )
+        info.setTextFormat(Qt.RichText)
+        info.setWordWrap(True)
+
+        layout.addWidget(title)
+        layout.addWidget(subtitle)
+        layout.addWidget(repo)
+        layout.addWidget(info)
+
+        close_btn = QPushButton("Close")
+        close_btn.clicked.connect(self.accept)
+        buttons = QHBoxLayout()
+        buttons.addStretch(1)
+        buttons.addWidget(close_btn)
+        layout.addLayout(buttons)
+
+
+class ClickableWidget(QWidget):
+    clicked = Signal()
+
+    def mousePressEvent(self, event) -> None:
+        if event.button() == Qt.LeftButton:
+            self.clicked.emit()
+        super().mousePressEvent(event)
+
+
+class TaskActionsPopup(QDialog):
+    def __init__(self, parent: QWidget, item: dict, is_current: bool) -> None:
+        super().__init__(parent, Qt.Popup | Qt.FramelessWindowHint)
+        self.setAttribute(Qt.WA_DeleteOnClose)
+        self.setModal(False)
+        self.setObjectName("taskActionsPopup")
+
+        layout = QVBoxLayout(self)
+        layout.setContentsMargins(12, 12, 12, 12)
+        layout.setSpacing(10)
+
+        title = QLabel(item.get("text", ""))
+        title.setWordWrap(True)
+        layout.addWidget(title)
+
+        actions = QHBoxLayout()
+        actions.setContentsMargins(0, 0, 0, 0)
+        actions.setSpacing(6)
+        self.current_btn = QPushButton("◉" if is_current else "◎")
+        self.current_btn.setObjectName("iconBtn")
+        self.current_btn.setFixedSize(34, 34)
+        self.edit_btn = QPushButton("✎")
+        self.edit_btn.setObjectName("iconBtn")
+        self.edit_btn.setFixedSize(34, 34)
+        self.delete_btn = QPushButton("×")
+        self.delete_btn.setObjectName("iconBtn")
+        self.delete_btn.setFixedSize(34, 34)
+        for button in (self.current_btn, self.edit_btn, self.delete_btn):
+            actions.addWidget(button)
+        actions.addStretch(1)
+        layout.addLayout(actions)
+
+
 class TaskRowWidget(QWidget):
     complete_requested = Signal(int)
     edit_requested = Signal(int)
     delete_requested = Signal(int)
     current_toggled = Signal(int)
 
-    def __init__(self, item: dict, accessibility: bool, alt: bool = False, palette: dict | None = None) -> None:
+    def __init__(
+        self,
+        item: dict,
+        accessibility: bool,
+        alt: bool = False,
+        palette: dict | None = None,
+        show_meta: bool = True,
+        layout_mode: str = "wide",
+    ) -> None:
         super().__init__()
         self.setAttribute(Qt.WA_StyledBackground, True)
         self.item = item
+        self.accessibility = accessibility
+        self.show_meta = show_meta
         self._palette = palette or {}
+        self.layout_mode = "wide"
+        self._popup_mode = False
+        self._actions_popup: TaskActionsPopup | None = None
         self.setObjectName("taskCardAlt" if alt else "taskCard")
 
         outer = QVBoxLayout(self)
         outer.setContentsMargins(12, 10, 12, 10)
         outer.setSpacing(6)
 
-        top = QHBoxLayout()
-        top.setSpacing(8)
-        done_btn = QPushButton("")
-        done_btn.setObjectName("doneBtn")
-        done_btn.setFixedSize(28, 28)
-        done_btn.clicked.connect(lambda: self.complete_requested.emit(self.item["id"]))
-        top.addWidget(done_btn, 0, Qt.AlignVCenter)
+        self.top_row = QWidget()
+        top_layout = QHBoxLayout(self.top_row)
+        top_layout.setContentsMargins(3, 1, 3, 1)
+        top_layout.setSpacing(10)
+        outer.addWidget(self.top_row)
 
-        text_wrap = QVBoxLayout()
-        text_wrap.setSpacing(4)
+        self.bottom_row = QWidget()
+        self.bottom_layout = QHBoxLayout(self.bottom_row)
+        self.bottom_layout.setContentsMargins(0, 0, 0, 0)
+        self.bottom_layout.setSpacing(6)
+        outer.addWidget(self.bottom_row)
+
+        self.done_btn = QPushButton("")
+        self.done_btn.setObjectName("doneBtn")
+        self.done_btn.setFixedSize(28, 28)
+        self.done_btn.setStyleSheet("margin: 1px 0px;")
+        self.done_btn.clicked.connect(lambda: self.complete_requested.emit(self.item["id"]))
+
+        self.content_widget = ClickableWidget()
+        self.content_widget.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Preferred)
+        self.content_widget.clicked.connect(self._handle_content_clicked)
+        self.content_widget.setAttribute(Qt.WA_StyledBackground, True)
+        self.content_widget.setObjectName("taskContent")
+        content_layout = QVBoxLayout(self.content_widget)
+        content_layout.setContentsMargins(2, 2, 2, 2)
+        content_layout.setSpacing(4)
+
         self.text_label = QLabel()
         self.text_label.setTextInteractionFlags(Qt.TextBrowserInteraction)
         self.text_label.setOpenExternalLinks(False)
         self.text_label.linkActivated.connect(open_url)
         self.text_label.setWordWrap(True)
+        self.text_label.installEventFilter(self)
         escaped = self.item.get("text", "").replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
         self.text_label.setText(URL_RE.sub(r'<a href="\1">\1</a>', escaped))
-        text_wrap.addWidget(self.text_label)
+        content_layout.addWidget(self.text_label)
 
+        self.meta_label = QLabel(self._meta_text())
+        self.meta_label.setObjectName("metaLabel")
+        self.meta_label.setWordWrap(True)
+        self.meta_label.setVisible(self.show_meta)
+        self.meta_label.installEventFilter(self)
+        content_layout.addWidget(self.meta_label)
+
+        self.progress_bar: QProgressBar | None = None
+        ratio = due_progress_ratio(self.item)
+        if ratio is not None:
+            due_dt = parse_due_date(self.item.get("due_date"))
+            is_overdue = due_dt is not None and due_dt < datetime.now()
+            self.progress_bar = QProgressBar()
+            self.progress_bar.setRange(0, 1000)
+            self.progress_bar.setValue(int(ratio * 1000))
+            self.progress_bar.setTextVisible(False)
+            self.progress_bar.setFixedHeight(7 if accessibility else 5)
+            if is_overdue:
+                card = self._palette.get("CARD", "#ffffff")
+                r, g, b = int(card[1:3], 16), int(card[3:5], 16), int(card[5:7], 16)
+                is_dark_theme = (r * 299 + g * 587 + b * 114) / 1000 < 128
+                if is_dark_theme:
+                    self.progress_bar.setStyleSheet(
+                        "QProgressBar { background: #3a1010; border: none; border-radius: 3px; }"
+                        "QProgressBar::chunk { background: #cc2828; border-radius: 3px; }"
+                    )
+                else:
+                    self.progress_bar.setStyleSheet(
+                        "QProgressBar { background: #f5d5d5; border: none; border-radius: 3px; }"
+                        "QProgressBar::chunk { background: #d94f4f; border-radius: 3px; }"
+                    )
+            self.progress_bar.installEventFilter(self)
+            content_layout.addWidget(self.progress_bar)
+
+        self.wide_actions_widget, self.wide_current_btn, self.wide_drag_handle = self._build_actions_widget()
+        self.compact_actions_widget, self.compact_current_btn, self.compact_drag_handle = self._build_actions_widget()
+        self.drag_handle = self.wide_drag_handle
+
+        top_layout.addWidget(self.done_btn, 0, Qt.AlignVCenter)
+        top_layout.addWidget(self.content_widget, 1)
+        top_layout.addWidget(self.wide_actions_widget, 0, Qt.AlignVCenter)
+        self.bottom_layout.addWidget(self.compact_actions_widget)
+
+        self.bottom_row.setVisible(False)
+        self.bottom_row.setMaximumHeight(0)
+        self.set_layout_mode(layout_mode)
+
+    def _meta_text(self) -> str:
+        if not self.show_meta:
+            return ""
         meta_parts = [f"tab {self.item.get('tab', 'General')}", f"added {self.item.get('created_at', '')}"]
         if self.item.get("due_date"):
             meta_parts.append(f"due {format_dt(self.item['due_date'])} ({format_remaining_time(self.item['due_date'])})")
         if self.item.get("extra_info"):
             meta_parts.append("extra info")
-        meta = QLabel("  ·  ".join(meta_parts))
-        meta.setObjectName("metaLabel")
-        meta.setWordWrap(True)
-        text_wrap.addWidget(meta)
-        top.addLayout(text_wrap, 1)
+        return "  ·  ".join(meta_parts)
 
-        actions = QHBoxLayout()
-        actions.setSpacing(4)
+    def set_show_meta(self, enabled: bool) -> None:
+        self.show_meta = bool(enabled)
+        self.meta_label.setVisible(self.show_meta)
+        self.meta_label.setText(self._meta_text())
+
+    def _build_actions_widget(self) -> tuple[QWidget, QPushButton, DragHandle]:
+        widget = QWidget()
+        widget.setSizePolicy(QSizePolicy.Maximum, QSizePolicy.Fixed)
+        widget.setMinimumHeight(34)
+        widget.setAttribute(Qt.WA_StyledBackground, True)
+        widget.setObjectName("taskActions")
+        actions = QHBoxLayout(widget)
+        actions.setContentsMargins(3, 1, 3, 1)
+        actions.setSpacing(6)
         current_btn = QPushButton("◉" if self.item.get("current") else "◎")
         current_btn.setObjectName("iconBtn")
         current_btn.setFixedSize(34, 34)
@@ -549,38 +741,81 @@ class TaskRowWidget(QWidget):
         delete_btn.setObjectName("iconBtn")
         delete_btn.setFixedSize(34, 34)
         delete_btn.clicked.connect(lambda: self.delete_requested.emit(self.item["id"]))
-        self.drag_handle = DragHandle()
+        drag_handle = DragHandle()
         actions.addWidget(current_btn)
         actions.addWidget(edit_btn)
         actions.addWidget(delete_btn)
-        actions.addWidget(self.drag_handle)
-        top.addLayout(actions, 0)
-        outer.addLayout(top)
+        actions.addWidget(drag_handle)
+        return widget, current_btn, drag_handle
 
-        ratio = due_progress_ratio(self.item)
-        if ratio is not None:
-            due_dt = parse_due_date(self.item.get("due_date"))
-            is_overdue = due_dt is not None and due_dt < datetime.now()
-            bar = QProgressBar()
-            bar.setRange(0, 1000)
-            bar.setValue(int(ratio * 1000))
-            bar.setTextVisible(False)
-            bar.setFixedHeight(7 if accessibility else 5)
-            if is_overdue:
-                card = self._palette.get("CARD", "#ffffff")
-                r, g, b = int(card[1:3], 16), int(card[3:5], 16), int(card[5:7], 16)
-                is_dark_theme = (r * 299 + g * 587 + b * 114) / 1000 < 128
-                if is_dark_theme:
-                    bar.setStyleSheet(
-                        "QProgressBar { background: #3a1010; border: none; border-radius: 3px; }"
-                        "QProgressBar::chunk { background: #cc2828; border-radius: 3px; }"
-                    )
-                else:
-                    bar.setStyleSheet(
-                        "QProgressBar { background: #f5d5d5; border: none; border-radius: 3px; }"
-                        "QProgressBar::chunk { background: #d94f4f; border-radius: 3px; }"
-                    )
-            outer.addWidget(bar)
+    def _handle_content_clicked(self) -> None:
+        if not self._popup_mode:
+            return
+        self._open_actions_popup()
+
+    def _update_content_interaction(self) -> None:
+        self.content_widget.setCursor(Qt.PointingHandCursor if self._popup_mode else Qt.ArrowCursor)
+        self.text_label.setCursor(Qt.PointingHandCursor if self._popup_mode else Qt.IBeamCursor)
+        self.meta_label.setCursor(Qt.PointingHandCursor if self._popup_mode else Qt.ArrowCursor)
+
+    def _open_actions_popup(self) -> None:
+        if self._actions_popup is not None and self._actions_popup.isVisible():
+            self._actions_popup.close()
+        popup = TaskActionsPopup(self, self.item, bool(self.item.get("current")))
+        popup.current_btn.clicked.connect(lambda: self._popup_action(self.current_toggled))
+        popup.edit_btn.clicked.connect(lambda: self._popup_action(self.edit_requested))
+        popup.delete_btn.clicked.connect(lambda: self._popup_action(self.delete_requested))
+        anchor = self.content_widget.mapToGlobal(self.content_widget.rect().bottomLeft())
+        popup.move(anchor)
+        popup.show()
+        self._actions_popup = popup
+
+    def _popup_action(self, signal) -> None:
+        if self._actions_popup is not None:
+            self._actions_popup.close()
+            self._actions_popup = None
+        signal.emit(self.item["id"])
+
+    def eventFilter(self, watched, event):
+        if (
+            self._popup_mode
+            and watched in {self.text_label, self.meta_label, self.progress_bar}
+            and event.type() == QEvent.MouseButtonPress
+            and event.button() == Qt.LeftButton
+        ):
+            self._open_actions_popup()
+            return True
+        return super().eventFilter(watched, event)
+
+    def set_layout_mode(self, layout_mode: str) -> None:
+        mode = layout_mode if layout_mode in {"wide", "compact", "popup"} else "wide"
+        if mode == self.layout_mode and self._popup_mode == (mode == "popup"):
+            return
+        if ROW_DEBUG_LOGS:
+            debug_log("task_row.set_layout_mode", item_id=self.item["id"], mode=mode)
+        self.layout_mode = mode
+        self._popup_mode = mode == "popup"
+        self.wide_actions_widget.setVisible(mode == "wide")
+        self.compact_actions_widget.setVisible(mode == "compact")
+        self.bottom_row.setVisible(mode == "compact")
+        self.bottom_row.setMaximumHeight(16777215 if mode == "compact" else 0)
+        self.bottom_layout.setAlignment(self.compact_actions_widget, Qt.AlignRight)
+        self._update_content_interaction()
+
+    def measure_for_width(self, width: int) -> None:
+        if width <= 0:
+            return
+        if ROW_DEBUG_LOGS:
+            debug_log("task_row.measure_for_width", item_id=self.item["id"], width=width, mode=self.layout_mode)
+        self.resize(width, 1)
+        self.adjustSize()
+
+    def sizeHint(self):
+        hint = super().sizeHint()
+        layout = self.layout()
+        if layout is None:
+            return hint
+        return layout.sizeHint().expandedTo(hint)
 
 
 class HistoryRowWidget(QWidget):
@@ -671,6 +906,9 @@ class MainWindow(QMainWindow):
         self.custom_palette = self.settings.get("custom_palette", {}) if isinstance(self.settings.get("custom_palette", {}), dict) else {}
         self.font_scale = float(self.settings.get("font_scale", 1.0) or 1.0)
         self.accessibility_mode = bool(self.settings.get("accessibility_mode", False))
+        self.show_item_meta = bool(self.settings.get("show_item_meta", True))
+        self.tab_visible_count = max(1, min(12, int(self.settings.get("tab_visible_count", 5) or 5)))
+        self.tab_window_start = 0
         self.active_tab = "All"
         self.active_view = "main"
         self.undo_item: dict | None = None
@@ -678,11 +916,51 @@ class MainWindow(QMainWindow):
         self.undo_timer.setInterval(3000)
         self.undo_timer.setSingleShot(True)
         self.undo_timer.timeout.connect(self.finalize_pending_completion)
+        self.resize_settle_timer = QTimer(self)
+        self.resize_settle_timer.setInterval(RESIZE_SETTLE_MS)
+        self.resize_settle_timer.setSingleShot(True)
+        self.resize_settle_timer.timeout.connect(self.handle_resize_settled)
+        self._header_compact_level = -1
+        self._main_render_signature: tuple[int, str] | None = None
+        self._row_size_cache: dict[tuple, QSize] = {}
+        self._ui_ready = False
+        self._initial_render_done = False
+        self._resize_pending = False
+        self._header_init_scheduled = False
 
         self._build_ui()
+        self.loading_label.setVisible(True)
+        self.pages.setVisible(False)
         self.apply_theme(self.theme_name, persist=False)
-        self.refresh_all()
         self.set_on_top(bool(self.settings.get("always_on_top", True)), persist=False)
+
+    def showEvent(self, event) -> None:
+        super().showEvent(event)
+        debug_log("main.show_event", width=self.width(), height=self.height(), initialized=self._header_init_scheduled)
+        if self._header_init_scheduled:
+            return
+        self._header_init_scheduled = True
+
+        def finish_init() -> None:
+            self._ui_ready = True
+            debug_log("main.finish_init", width=self.width(), height=self.height())
+            self.update_header_compact()
+            debug_log("main.schedule_initial_refresh", reason="finish_init")
+            QTimer.singleShot(0, self.run_initial_refresh)
+
+        QTimer.singleShot(0, finish_init)
+
+    def run_initial_refresh(self) -> None:
+        debug_log(
+            "main.run_initial_refresh",
+            pages_visible=self.pages.isVisible(),
+            active_view=self.active_view,
+            viewport_width=self.task_viewport_width(),
+        )
+        self.refresh_all()
+        self.pages.setVisible(True)
+        self.loading_label.setVisible(False)
+        self._initial_render_done = True
 
     def _build_ui(self) -> None:
         central = QWidget()
@@ -709,14 +987,33 @@ class MainWindow(QMainWindow):
         self.on_top_btn = QPushButton("on top")
         self.on_top_btn.setCheckable(True)
         for widget in (self.add_btn, self.add_tab_btn, self.history_btn, self.tools_btn, self.on_top_btn):
+            widget.setSizePolicy(QSizePolicy.Maximum, QSizePolicy.Fixed)
             header_actions_layout.addWidget(widget)
         self.header_actions.setVisible(False)
         header.addWidget(self.header_actions)
         root.addLayout(header)
 
-        self.tab_bar = QHBoxLayout()
-        self.tab_bar.setSpacing(6)
-        root.addLayout(self.tab_bar)
+        self.tab_bar_frame = QFrame()
+        self.tab_bar_frame.setObjectName("tabBarFrame")
+        self.tab_bar_layout = QHBoxLayout(self.tab_bar_frame)
+        self.tab_bar_layout.setContentsMargins(8, 8, 8, 8)
+        self.tab_bar_layout.setSpacing(6)
+        self.tab_left_btn = QPushButton("←")
+        self.tab_left_btn.setObjectName("iconBtn")
+        self.tab_left_btn.setFixedSize(30, 30)
+        self.tab_left_btn.clicked.connect(lambda: self.shift_tab_window(-1))
+        self.tab_right_btn = QPushButton("→")
+        self.tab_right_btn.setObjectName("iconBtn")
+        self.tab_right_btn.setFixedSize(30, 30)
+        self.tab_right_btn.clicked.connect(lambda: self.shift_tab_window(1))
+        self.tab_tabs_host = QWidget()
+        self.tab_tabs_layout = QHBoxLayout(self.tab_tabs_host)
+        self.tab_tabs_layout.setContentsMargins(0, 0, 0, 0)
+        self.tab_tabs_layout.setSpacing(6)
+        self.tab_bar_layout.addWidget(self.tab_tabs_host, 1)
+        self.tab_bar_layout.addWidget(self.tab_left_btn)
+        self.tab_bar_layout.addWidget(self.tab_right_btn)
+        root.addWidget(self.tab_bar_frame)
 
         self.loading_label = QLabel("Loading...")
         self.loading_label.setAlignment(Qt.AlignCenter)
@@ -860,6 +1157,10 @@ class MainWindow(QMainWindow):
         self.accessibility_check.setChecked(self.accessibility_mode)
         self.accessibility_check.toggled.connect(self.toggle_accessibility)
         appearance_layout.addWidget(self.accessibility_check)
+        self.item_meta_check = QCheckBox("Show item meta")
+        self.item_meta_check.setChecked(self.show_item_meta)
+        self.item_meta_check.toggled.connect(self.toggle_item_meta)
+        appearance_layout.addWidget(self.item_meta_check)
         self.tools_layout.addWidget(appearance)
 
         self.tab_manager_box = QFrame()
@@ -871,6 +1172,43 @@ class MainWindow(QMainWindow):
         self.tab_manager_list = QVBoxLayout()
         self.tab_manager_layout.addLayout(self.tab_manager_list)
         self.tools_layout.addWidget(self.tab_manager_box)
+        tabs_control = QFrame()
+        tabs_control_layout = QVBoxLayout(tabs_control)
+        tabs_control_layout.setContentsMargins(12, 12, 12, 12)
+        tabs_title = QLabel("Tab strip")
+        tabs_title.setObjectName("sectionTitle")
+        tabs_control_layout.addWidget(tabs_title)
+        tabs_row = QHBoxLayout()
+        tabs_row.addWidget(QLabel("Visible tabs"))
+        self.tab_visible_spin = QSpinBox()
+        self.tab_visible_spin.setRange(2, 12)
+        self.tab_visible_spin.setValue(self.tab_visible_count)
+        self.tab_visible_spin.valueChanged.connect(self.set_tab_visible_count)
+        tabs_row.addWidget(self.tab_visible_spin)
+        tabs_row.addStretch(1)
+        tabs_control_layout.addLayout(tabs_row)
+        tabs_hint = QLabel("Use the arrows in the tab bar to scroll when there are more tabs than fit.")
+        tabs_hint.setWordWrap(True)
+        tabs_control_layout.addWidget(tabs_hint)
+        self.tools_layout.addWidget(tabs_control)
+
+        about_box = QFrame()
+        about_layout = QVBoxLayout(about_box)
+        about_layout.setContentsMargins(12, 12, 12, 12)
+        about_title = QLabel("About")
+        about_title.setObjectName("sectionTitle")
+        about_layout.addWidget(about_title)
+        about_subtitle = QLabel("Minimal desktop checklist")
+        about_subtitle.setWordWrap(True)
+        about_layout.addWidget(about_subtitle)
+        about_repo = QLabel(f'<a href="{BUILD_REPO_URL}">{BUILD_REPO_URL}</a>')
+        about_repo.setOpenExternalLinks(True)
+        about_repo.setTextInteractionFlags(Qt.TextBrowserInteraction)
+        about_layout.addWidget(about_repo)
+        about_info = QLabel(f"{APP_NAME} {APP_VERSION}  ·  {BUILD_COMMIT}")
+        about_info.setWordWrap(True)
+        about_layout.addWidget(about_info)
+        self.tools_layout.addWidget(about_box)
         self.tools_layout.addStretch(1)
 
     def eventFilter(self, watched, event):
@@ -960,6 +1298,16 @@ class MainWindow(QMainWindow):
                 background: {p['CARD_ALT']};
                 border: 1px solid {p['BORDER']};
                 border-radius: 14px;
+            }}
+            QWidget#taskContent {{
+                background: rgba(255, 255, 255, 0.04);
+                border: 1px solid {p['BORDER']};
+                border-radius: 12px;
+            }}
+            QWidget#taskActions {{
+                background: rgba(255, 255, 255, 0.04);
+                border: 1px solid {p['BORDER']};
+                border-radius: 10px;
             }}
 
             /* ── List widgets ─────────────────────────────────── */
@@ -1177,10 +1525,12 @@ class MainWindow(QMainWindow):
             }}
             """
         )
-        self.refresh_all()
+        if self._ui_ready:
+            self.refresh_all()
 
     def set_font_scale(self, value: float) -> None:
         self.font_scale = max(0.8, min(1.8, value))
+        self._row_size_cache.clear()
         self.settings["font_scale"] = self.font_scale
         self.save()
         if hasattr(self, "font_scale_label"):
@@ -1189,17 +1539,139 @@ class MainWindow(QMainWindow):
 
     def toggle_accessibility(self, checked: bool) -> None:
         self.accessibility_mode = bool(checked)
+        self._row_size_cache.clear()
         self.settings["accessibility_mode"] = self.accessibility_mode
         self.save()
         self.refresh_styles()
 
+    def toggle_item_meta(self, checked: bool) -> None:
+        self.show_item_meta = bool(checked)
+        self._row_size_cache.clear()
+        self.settings["show_item_meta"] = self.show_item_meta
+        self.save()
+        self.refresh_all()
+
+    def header_compact_level_for_width(self, width: int) -> int:
+        debug_log("responsive.header_level_for_width", width=width)
+        if width < HEADER_MIN_WIDTH:
+            return 2
+        if width < HEADER_COMPACT_WIDTH:
+            return 1
+        return 0
+
+    def task_layout_mode_for_width(self, width: int) -> str:
+        debug_log("responsive.task_mode_for_width", width=width)
+        if width < TASK_POPUP_WIDTH:
+            return "popup"
+        if width < TASK_COMPACT_WIDTH:
+            return "compact"
+        return "wide"
+
+    def task_viewport_width(self) -> int:
+        if not hasattr(self, "task_list"):
+            return 0
+        width = max(0, self.task_list.viewport().width())
+        debug_log("responsive.task_viewport_width", width=width)
+        return width
+
+    def current_main_render_signature(self) -> tuple[int, str]:
+        use_viewport = self._initial_render_done and self.pages.isVisible() and not self._resize_pending
+        viewport_width = self.task_viewport_width() if use_viewport else max(0, self.centralWidget().width() - 24)
+        row_width = max(0, viewport_width - 8)
+        mode = self.task_layout_mode_for_width(viewport_width)
+        debug_log(
+            "responsive.main_render_signature",
+            viewport_width=viewport_width,
+            row_width=row_width,
+            mode=mode,
+            source="viewport" if use_viewport else "window",
+        )
+        return row_width, mode
+
+    def row_size_cache_key(self, item: dict, row_width: int, layout_mode: str) -> tuple:
+        return (
+            item.get("id"),
+            item.get("text", ""),
+            item.get("created_at", ""),
+            item.get("due_date", ""),
+            item.get("extra_info", ""),
+            item.get("tab", ""),
+            bool(item.get("current")),
+            self.show_item_meta,
+            self.accessibility_mode,
+            round(self.font_scale, 2),
+            row_width,
+            layout_mode,
+        )
+
+    def resizeEvent(self, event) -> None:
+        super().resizeEvent(event)
+        debug_log("main.resize_event", width=self.width(), height=self.height(), ui_ready=self._ui_ready, active_view=self.active_view)
+        if self._ui_ready and self._initial_render_done:
+            if not self._resize_pending:
+                self._resize_pending = True
+                debug_log("main.begin_resize_cycle", width=self.width(), height=self.height())
+                self.loading_label.setText("Resizing...")
+                self.loading_label.setVisible(True)
+                self.pages.setVisible(False)
+            debug_log("main.schedule_resize_settle", delay_ms=RESIZE_SETTLE_MS, reason="resize_event")
+            self.resize_settle_timer.start()
+
+    def handle_resize_settled(self) -> None:
+        debug_log(
+            "main.handle_resize_settled.start",
+            ui_ready=self._ui_ready,
+            active_view=self.active_view,
+            initial_render_done=self._initial_render_done,
+        )
+        if not self._ui_ready or not self._initial_render_done:
+            return
+        self.update_header_compact()
+        self.refresh_all()
+        self.loading_label.setText("Loading...")
+        self.loading_label.setVisible(False)
+        self.pages.setVisible(True)
+        self._resize_pending = False
+
+    def update_header_compact(self) -> None:
+        if not self._ui_ready or not hasattr(self, "header_actions") or self.width() <= 0:
+            return
+        level = self.header_compact_level_for_width(self.width())
+        if level == self._header_compact_level:
+            debug_log("main.update_header_compact.skip", level=level)
+            return
+        debug_log("main.update_header_compact.apply", previous=self._header_compact_level, level=level, width=self.width())
+        self._header_compact_level = level
+        self.title_label.setVisible(level == 0)
+        if level == 0:
+            self.add_btn.setText("+ add")
+            self.add_tab_btn.setText("+ add tab")
+            self.history_btn.setText("history")
+            self.tools_btn.setText("tools")
+            self.on_top_btn.setText("on top" if not self.on_top_btn.isChecked() else "on top")
+        elif level == 1:
+            self.add_btn.setText("+")
+            self.add_tab_btn.setText("+ T")
+            self.history_btn.setText("H")
+            self.tools_btn.setText("T")
+            self.on_top_btn.setText("👁" if self.on_top_btn.isChecked() else "○")
+        else:
+            self.add_btn.setText("+")
+            self.add_tab_btn.setText("+T")
+            self.history_btn.setText("H")
+            self.tools_btn.setText("T")
+            self.on_top_btn.setText("👁" if self.on_top_btn.isChecked() else "○")
+        self.header_actions.setMinimumWidth(0)
+
     def switch_view(self, view: str) -> None:
+        debug_log("main.switch_view", from_view=self.active_view, to_view=view)
         self.loading_label.setVisible(True)
         self.pages.setVisible(False)
         self.active_view = view
         QTimer.singleShot(1, self._finish_switch_view)
 
     def _finish_switch_view(self) -> None:
+        debug_log("main.finish_switch_view", active_view=self.active_view)
         if self.active_view == "main":
             self.pages.setCurrentWidget(self.main_page)
             self.render_tab_bar()
@@ -1229,34 +1701,85 @@ class MainWindow(QMainWindow):
         self.update_footer()
 
     def render_tab_bar(self) -> None:
-        while self.tab_bar.count():
-            item = self.tab_bar.takeAt(0)
+        while self.tab_tabs_layout.count():
+            item = self.tab_tabs_layout.takeAt(0)
             widget = item.widget()
             if widget is not None:
                 widget.deleteLater()
+        self._clamp_tab_window()
+        if self.active_tab != "All":
+            self._ensure_active_tab_visible(self.active_tab)
         all_btn = QPushButton("All")
         all_btn.setObjectName("tabBtn")
         all_btn.setCheckable(True)
         all_btn.setChecked(self.active_tab == "All")
         all_btn.clicked.connect(lambda: self.set_active_tab("All"))
-        self.tab_bar.addWidget(all_btn)
-        for tab in self.tabs:
+        self.tab_tabs_layout.addWidget(all_btn)
+
+        tabs = self.tabs[self.tab_window_start : self.tab_window_start + self.tab_visible_count]
+        for tab in tabs:
             btn = QPushButton(tab["name"])
             btn.setObjectName("tabBtn")
             btn.setCheckable(True)
             btn.setChecked(self.active_tab == tab["name"])
             btn.clicked.connect(lambda checked=False, name=tab["name"]: self.set_active_tab(name))
-            self.tab_bar.addWidget(btn)
-        self.tab_bar.addStretch(1)
+            self.tab_tabs_layout.addWidget(btn)
+        self.tab_tabs_layout.addStretch(1)
+
+        overflow = len(self.tabs) > self.tab_visible_count
+        self.tab_left_btn.setVisible(overflow)
+        self.tab_right_btn.setVisible(overflow)
+        self.tab_left_btn.setEnabled(self.tab_window_start > 0)
+        self.tab_right_btn.setEnabled(self.tab_window_start + self.tab_visible_count < len(self.tabs))
 
     def set_active_tab(self, name: str) -> None:
+        debug_log("main.set_active_tab", current=self.active_tab, target=name, active_view=self.active_view)
         play_click()
         self.active_tab = name
+        if name != "All":
+            self._ensure_active_tab_visible(name)
         if self.active_view == "main":
             self.render_tab_bar()
             self.render_main()
         else:
             self.switch_view("main")
+
+    def _clamp_tab_window(self) -> None:
+        max_start = max(0, len(self.tabs) - self.tab_visible_count)
+        self.tab_window_start = max(0, min(self.tab_window_start, max_start))
+
+    def _ensure_active_tab_visible(self, name: str) -> None:
+        names = [tab["name"] for tab in self.tabs]
+        try:
+            index = names.index(name)
+        except ValueError:
+            return
+        if index < self.tab_window_start:
+            self.tab_window_start = index
+        elif index >= self.tab_window_start + self.tab_visible_count:
+            self.tab_window_start = index - self.tab_visible_count + 1
+        self._clamp_tab_window()
+
+    def shift_tab_window(self, direction: int) -> None:
+        if not self.tabs:
+            return
+        names = [tab["name"] for tab in self.tabs]
+        if self.active_tab == "All":
+            current_index = -1 if direction > 0 else 0
+        else:
+            try:
+                current_index = names.index(self.active_tab)
+            except ValueError:
+                current_index = -1 if direction > 0 else 0
+        target_index = max(0, min(len(names) - 1, current_index + direction))
+        self.set_active_tab(names[target_index])
+
+    def set_tab_visible_count(self, value: int) -> None:
+        self.tab_visible_count = max(2, min(12, int(value)))
+        self.settings["tab_visible_count"] = self.tab_visible_count
+        self.save()
+        self._clamp_tab_window()
+        self.render_tab_bar()
 
     def visible_items(self) -> list[dict]:
         if self.active_tab != "All":
@@ -1266,20 +1789,54 @@ class MainWindow(QMainWindow):
         return current + rest
 
     def render_main(self) -> None:
-        self.task_list.clear()
-        for index, item in enumerate(self.visible_items()):
-            list_item = QListWidgetItem()
-            list_item.setData(Qt.UserRole, item["id"])
-            list_item.setFlags(list_item.flags() | Qt.ItemIsDragEnabled | Qt.ItemIsDropEnabled)
-            row = TaskRowWidget(item, self.accessibility_mode, alt=index % 2 == 1, palette=self.palette_values())
-            row.drag_handle.bind(self.task_list, item["id"])
-            row.complete_requested.connect(self.complete_item)
-            row.edit_requested.connect(self.open_edit_task)
-            row.delete_requested.connect(self.delete_item)
-            row.current_toggled.connect(self.toggle_current)
-            list_item.setSizeHint(row.sizeHint())
-            self.task_list.addItem(list_item)
-            self.task_list.setItemWidget(list_item, row)
+        row_width, layout_mode = self.current_main_render_signature()
+        visible_items = self.visible_items()
+        debug_log(
+            "main.render_main.start",
+            row_width=row_width,
+            layout_mode=layout_mode,
+            visible_items=len(visible_items),
+            active_tab=self.active_tab,
+        )
+        self.task_list.setUpdatesEnabled(False)
+        self.task_list.viewport().setUpdatesEnabled(False)
+        try:
+            self.task_list.clear()
+            for index, item in enumerate(visible_items):
+                list_item = QListWidgetItem()
+                list_item.setData(Qt.UserRole, item["id"])
+                list_item.setFlags(list_item.flags() | Qt.ItemIsDragEnabled | Qt.ItemIsDropEnabled)
+                row = TaskRowWidget(
+                    item,
+                    self.accessibility_mode,
+                    alt=index % 2 == 1,
+                    palette=self.palette_values(),
+                    show_meta=self.show_item_meta,
+                    layout_mode=layout_mode,
+                )
+                row.wide_drag_handle.bind(self.task_list, item["id"])
+                row.compact_drag_handle.bind(self.task_list, item["id"])
+                row.complete_requested.connect(self.complete_item)
+                row.edit_requested.connect(self.open_edit_task)
+                row.delete_requested.connect(self.delete_item)
+                row.current_toggled.connect(self.toggle_current)
+                cache_key = self.row_size_cache_key(item, row_width, layout_mode)
+                cached_size = self._row_size_cache.get(cache_key)
+                if row_width > 0:
+                    row.setFixedWidth(row_width)
+                    if cached_size is None:
+                        row.measure_for_width(row_width)
+                        cached_size = QSize(row.sizeHint())
+                        self._row_size_cache[cache_key] = QSize(cached_size)
+                list_item.setSizeHint(cached_size if cached_size is not None else row.sizeHint())
+                self.task_list.addItem(list_item)
+                self.task_list.setItemWidget(list_item, row)
+        finally:
+            self.task_list.viewport().setUpdatesEnabled(True)
+            self.task_list.setUpdatesEnabled(True)
+            self.task_list.viewport().update()
+        self._main_render_signature = (row_width, layout_mode)
+        debug_log("main.render_main.done", signature=self._main_render_signature, count=self.task_list.count())
 
     def render_history(self) -> None:
         self.history_list.clear()
@@ -1549,7 +2106,11 @@ class MainWindow(QMainWindow):
                 month += 1
             if completed.year == now.year:
                 year += 1
-        self.footer_label.setText(f"pending {pending}  ·  today {today}  ·  month {month}  ·  year {year}")
+        debug_log("main.update_footer", width=self.width(), pending=pending, today=today, month=month, year=year)
+        if self.width() < FOOTER_COMPACT_WIDTH:
+            self.footer_label.setText(f"P {pending}  ·  T {today}  ·  M {month}  ·  Y {year}")
+        else:
+            self.footer_label.setText(f"pending {pending}  ·  Tasks done: today {today}  ·  month {month}  ·  year {year}")
 
     def export_json(self) -> None:
         path, _ = QFileDialog.getSaveFileName(self, "Export JSON", str(Path.home() / "focus-export.json"), "JSON Files (*.json)")
@@ -1571,10 +2132,21 @@ class MainWindow(QMainWindow):
         self.history = [item for index, entry in enumerate(raw.get("history", [])) if (item := self.store._normalize_history(entry, index))]
         settings = raw.get("settings", {}) if isinstance(raw.get("settings", {}), dict) else {}
         self.settings.update(settings)
+        self.show_item_meta = bool(self.settings.get("show_item_meta", True))
+        self._row_size_cache.clear()
+        if hasattr(self, "item_meta_check"):
+            self.item_meta_check.blockSignals(True)
+            self.item_meta_check.setChecked(self.show_item_meta)
+            self.item_meta_check.blockSignals(False)
         self.tabs = self.store.normalize_tabs(self.settings.get("tabs", default_tabs()))
         self.settings["tabs"] = self.tabs
         self.save()
         self.refresh_all()
+
+    def open_about_dialog(self) -> None:
+        play_click()
+        dialog = AboutDialog(self)
+        dialog.exec()
 
     def startup_path(self) -> Path | None:
         system = platform.system().lower()
@@ -1614,8 +2186,10 @@ class MainWindow(QMainWindow):
 
     def set_on_top(self, checked: bool, persist: bool = True) -> None:
         self.setWindowFlag(Qt.WindowStaysOnTopHint, checked)
-        self.show()
+        if self.isVisible():
+            self.show()
         self.on_top_btn.setChecked(checked)
+        self.update_header_compact()
         if persist:
             self.settings["always_on_top"] = checked
             self.save()
@@ -1629,6 +2203,8 @@ class MainWindow(QMainWindow):
         self.settings["custom_palette"] = self.custom_palette
         self.settings["font_scale"] = self.font_scale
         self.settings["accessibility_mode"] = self.accessibility_mode
+        self.settings["show_item_meta"] = self.show_item_meta
+        self.settings["tab_visible_count"] = self.tab_visible_count
         self.store.save(self.items, self.history, self.settings)
 
     def closeEvent(self, event) -> None:
