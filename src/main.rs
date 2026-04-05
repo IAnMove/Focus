@@ -1,3 +1,4 @@
+mod audio;
 mod model;
 mod storage;
 
@@ -394,11 +395,12 @@ fn main() -> Result<(), slint::PlatformError> {
 
     let state = Rc::new(RefCell::new(AppState::new(data, store)));
     let undo_timer = Rc::new(RefCell::new(Timer::default()));
+    let header_timer = Rc::new(RefCell::new(Timer::default()));
 
     apply_always_on_top(&app, state.borrow().data.settings.always_on_top);
     refresh_ui(&app, &state.borrow());
 
-    bind_callbacks(&app, state.clone(), undo_timer.clone());
+    bind_callbacks(&app, state.clone(), undo_timer.clone(), header_timer.clone());
 
     let result = app.run();
 
@@ -410,8 +412,38 @@ fn main() -> Result<(), slint::PlatformError> {
     result
 }
 
-fn bind_callbacks(app: &AppWindow, state: Rc<RefCell<AppState>>, undo_timer: Rc<RefCell<Timer>>) {
+fn bind_callbacks(
+    app: &AppWindow,
+    state: Rc<RefCell<AppState>>,
+    undo_timer: Rc<RefCell<Timer>>,
+    header_timer: Rc<RefCell<Timer>>,
+) {
     let app_weak = app.as_weak();
+
+    app.on_set_header_actions_visible({
+        let app_weak = app_weak.clone();
+        let header_timer = header_timer.clone();
+        move |show| {
+            if show {
+                header_timer.borrow_mut().stop();
+                if let Some(app) = app_weak.upgrade() {
+                    app.set_show_header_actions(true);
+                }
+                return;
+            }
+
+            let app_for_timer = app_weak.clone();
+            header_timer.borrow_mut().start(
+                TimerMode::SingleShot,
+                Duration::from_millis(140),
+                move || {
+                    if let Some(app) = app_for_timer.upgrade() {
+                        app.set_show_header_actions(false);
+                    }
+                },
+            );
+        }
+    });
 
     app.on_add_task({
         let app_weak = app_weak.clone();
@@ -422,6 +454,7 @@ fn bind_callbacks(app: &AppWindow, state: Rc<RefCell<AppState>>, undo_timer: Rc<
             state.draft_visible = true;
             state.history_visible = false;
             state.tools_visible = false;
+            audio::play_add();
             refresh_if_possible(&app_weak, &state);
         }
     });
@@ -453,6 +486,7 @@ fn bind_callbacks(app: &AppWindow, state: Rc<RefCell<AppState>>, undo_timer: Rc<
         move |name| {
             let mut state = state.borrow_mut();
             state.select_tab(name.to_string());
+            audio::play_click();
             refresh_if_possible(&app_weak, &state);
         }
     });
@@ -498,6 +532,7 @@ fn bind_callbacks(app: &AppWindow, state: Rc<RefCell<AppState>>, undo_timer: Rc<
             if !state_ref.complete_task(task_id as u64) {
                 return;
             }
+            audio::play_complete();
             refresh_if_possible(&app_weak, &state_ref);
             drop(state_ref);
 
@@ -538,6 +573,7 @@ fn bind_callbacks(app: &AppWindow, state: Rc<RefCell<AppState>>, undo_timer: Rc<
                 state.data.settings.always_on_top = !state.data.settings.always_on_top;
                 apply_always_on_top(&app, state.data.settings.always_on_top);
                 state.save();
+                audio::play_click();
                 refresh_ui(&app, &state);
             }
         }
@@ -549,6 +585,7 @@ fn bind_callbacks(app: &AppWindow, state: Rc<RefCell<AppState>>, undo_timer: Rc<
         move || {
             let mut state = state.borrow_mut();
             state.toggle_history();
+            audio::play_click();
             refresh_if_possible(&app_weak, &state);
         }
     });
@@ -559,6 +596,7 @@ fn bind_callbacks(app: &AppWindow, state: Rc<RefCell<AppState>>, undo_timer: Rc<
         move || {
             let mut state = state.borrow_mut();
             state.toggle_tools();
+            audio::play_click();
             refresh_if_possible(&app_weak, &state);
         }
     });

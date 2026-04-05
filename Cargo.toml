@@ -17,3 +17,7 @@ serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"
 # Fechas para timestamps, vencimientos y contadores de historial.
 chrono = { version = "0.4", default-features = false, features = ["clock", "serde", "std"] }
+
+[target.'cfg(windows)'.dependencies]
+# Tonos simples en Windows, equivalentes al winsound del script original.
+windows-sys = { version = "0.61", features = ["Win32_System_Diagnostics_Debug"] }

@@ -67,6 +67,50 @@ component TaskActionButton inherits Button {
     text: caption;
 }
 
+component HeaderIconButton inherits Rectangle {
+    in property <string> icon;
+    in property <string> label;
+    in property <bool> active;
+    in property <color> panel;
+    in property <color> accent;
+    in property <color> text-main;
+    in property <color> text-muted;
+    callback pressed();
+
+    width: 52px;
+    height: 52px;
+    border-radius: 16px;
+    border-width: 1px;
+    border-color: active ? accent : #2c3958;
+    background: active ? accent : panel;
+
+    VerticalLayout {
+        padding-top: 7px;
+        padding-bottom: 6px;
+        spacing: 1px;
+
+        Text {
+            horizontal-alignment: center;
+            text: icon;
+            color: active ? #08111f : text-main;
+            font-size: 18px;
+            font-weight: 700;
+        }
+
+        Text {
+            horizontal-alignment: center;
+            text: label;
+            color: active ? #08111f : text-muted;
+            font-size: 9px;
+            font-weight: active ? 700 : 500;
+        }
+    }
+
+    TouchArea {
+        clicked => { root.pressed(); }
+    }
+}
+
 component TaskCard inherits Rectangle {
     in property <TaskView> task;
     in property <color> panel;
@@ -401,6 +445,7 @@ export component AppWindow inherits Window {
     callback delete-tab(name: string);
     callback import-data();
     callback export-data();
+    callback set-header-actions-visible(show: bool);
 
     title: app-title;
     preferred-width: 460px;
@@ -441,9 +486,9 @@ export component AppWindow inherits Window {
 
                 changed has-hover => {
                     if (self.has-hover) {
-                        root.show-header-actions = true;
-                    } else if (!header_actions_hover.has-hover) {
-                        root.show-header-actions = false;
+                        root.set-header-actions-visible(true);
+                    } else {
+                        root.set-header-actions-visible(false);
                     }
                 }
             }
@@ -472,7 +517,7 @@ export component AppWindow inherits Window {
                 }
 
                 Rectangle {
-                    width: 252px;
+                    width: 232px;
                     height: parent.height;
                     background: transparent;
                     visible: root.show-header-actions;
@@ -485,9 +530,9 @@ export component AppWindow inherits Window {
 
                         changed has-hover => {
                             if (self.has-hover) {
-                                root.show-header-actions = true;
-                            } else if (!header_hover.has-hover) {
-                                root.show-header-actions = false;
+                                root.set-header-actions-visible(true);
+                            } else {
+                                root.set-header-actions-visible(false);
                             }
                         }
                     }
@@ -497,24 +542,48 @@ export component AppWindow inherits Window {
                         height: parent.height;
                         spacing: 6px;
 
-                        Button {
-                            text: root.editing-mode ? "Editing" : "Add";
-                            clicked => { root.add-task(); }
+                        HeaderIconButton {
+                            icon: "+";
+                            label: "add";
+                            active: root.draft-visible && root.main-visible;
+                            panel: root.panel-alt;
+                            accent: root.accent-warm;
+                            text-main: root.text-main;
+                            text-muted: root.text-muted;
+                            pressed => { root.add-task(); }
                         }
 
-                        Button {
-                            text: root.history-visible ? "Back" : "History";
-                            clicked => { root.show-history(); }
+                        HeaderIconButton {
+                            icon: root.history-visible ? "<" : "↺";
+                            label: "history";
+                            active: root.history-visible;
+                            panel: root.panel-alt;
+                            accent: root.accent-warm;
+                            text-main: root.text-main;
+                            text-muted: root.text-muted;
+                            pressed => { root.show-history(); }
                         }
 
-                        Button {
-                            text: root.tools-visible ? "Close tools" : "Tools";
-                            clicked => { root.show-tools(); }
+                        HeaderIconButton {
+                            icon: root.tools-visible ? "<" : "☰";
+                            label: "tools";
+                            active: root.tools-visible;
+                            panel: root.panel-alt;
+                            accent: root.accent-warm;
+                            text-main: root.text-main;
+                            text-muted: root.text-muted;
+                            pressed => { root.show-tools(); }
                         }
 
-                        Button {
-                            text: root.on-top-enabled ? "Pinned" : "Pin";
-                            clicked => { root.toggle-on-top(); }
+                        HeaderIconButton {
+                            icon: root.on-top-enabled ? "◉" : "◎";
+                            label: "pin";
+                            active: root.on-top-enabled;
+                            panel: root.panel-alt;
+                            accent: root.accent;
+                            text-main: root.text-main;
+                            text-muted: root.text-muted;
+                            pressed => { root.toggle-on-top(); }
                         }
                     }
                 }
