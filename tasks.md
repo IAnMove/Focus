@@ -68,6 +68,23 @@ Portar la aplicacion actual de checklist en Python a Rust usando Slint, mantenie
 - [x] 10. Implementar importacion/exportacion y documentar dependencias en `Cargo.toml`.
 - [x] 11. Probar compilacion, revisar paridad funcional y actualizar `README.md`.
 
+## Tareas pendientes de paridad con `focus.py`
+- [ ] 12. Rehacer la cabecera para que muestre acciones de forma estable al entrar en el bloque del titulo y las oculte al salir, sin parpadeo ni perdida de clicks.
+- [ ] 13. Rehacer las acciones por tarea con iconos compactos siempre visibles a la derecha y paso automatico a una fila inferior al reducir ancho.
+- [ ] 14. Corregir la interaccion de la fila de tarea para que funcionen `done`, `current`, `edit` y `delete` en todos los modos de ancho.
+- [ ] 15. Recuperar los presets visuales del script original: `warm`, `forest`, `ocean`, `rose` y `dark`.
+- [ ] 16. Recuperar ajustes visuales persistentes: escala de fuente, modo accesible y mostrar/ocultar metadata.
+- [ ] 17. Portar el panel `About` al final de `Tools`, con version, commit y enlace del proyecto.
+- [ ] 18. Limpiar la cabecera principal quitando el texto de estado tecnico y moviendo la informacion de version solo a `About`.
+- [ ] 19. Recuperar overflow de tabs con flechas laterales y ventana deslizante de tabs visibles.
+- [ ] 20. Hacer responsive la tira de tabs para que muestre al menos `All`, `General` y el espacio de navegacion lateral cuando haya overflow.
+- [ ] 21. Recuperar sonidos equivalentes al script original para add, click y complete, con comportamiento multiplataforma razonable.
+- [ ] 22. Portar selector y edicion completa de `due_date`, tiempo restante y progreso con el nivel de detalle del script original.
+- [ ] 23. Recuperar drag and drop real para reordenar tareas, manteniendo persistencia correcta.
+- [ ] 24. Recuperar inicio con el sistema en Windows y Linux.
+- [ ] 25. Recuperar enlaces clicables dentro del texto de la tarea y el comportamiento asociado.
+- [ ] 26. Revisar paridad final de UX/UI frente a `focus.py` y actualizar `README.md` con el estado real.
+
 ## Criterios de migracion
 - Mantener compatibilidad con Windows, macOS y Linux.
 - Evitar HTML, webview o soluciones embebidas de navegador.
@@ -76,4 +93,4 @@ Portar la aplicacion actual de checklist en Python a Rust usando Slint, mantenie
 - Hacer un commit por cada tarea completada.
 
 ## Siguiente paso
-Migracion base completada. Siguientes mejoras: cerrar brechas de paridad visual y de configuracion respecto a `focus.py`.
+Tarea 12: rehacer la cabecera para que muestre acciones estables al entrar en el bloque del titulo y las oculte al salir, sin parpadeo ni perdida de clicks.
