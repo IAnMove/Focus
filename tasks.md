@@ -64,7 +64,7 @@ Portar la aplicacion actual de checklist en Python a Rust usando Slint, mantenie
 - [x] 6. Conectar agregar, editar, completar, deshacer, eliminar y marcar `current`.
 - [x] 7. Implementar historial y restauracion de tareas.
 - [x] 8. Implementar gestion de tabs, filtrado y reordenamiento.
-- [ ] 9. Implementar ajustes de ventana, incluyendo always-on-top multiplataforma.
+- [x] 9. Implementar ajustes de ventana, incluyendo always-on-top multiplataforma.
 - [ ] 10. Implementar importacion/exportacion y documentar dependencias en `Cargo.toml`.
 - [ ] 11. Probar compilacion, revisar paridad funcional y actualizar `README.md`.
 
@@ -76,4 +76,4 @@ Portar la aplicacion actual de checklist en Python a Rust usando Slint, mantenie
 - Hacer un commit por cada tarea completada.
 
 ## Siguiente paso
-Tarea 9: implementar ajustes de ventana, incluyendo always-on-top multiplataforma.
+Tarea 10: implementar importacion/exportacion y documentar dependencias en `Cargo.toml`.

@@ -6,6 +6,7 @@ use std::rc::Rc;
 use std::time::Duration;
 
 use chrono::{Datelike, Local, NaiveDate, NaiveDateTime};
+use slint::winit_030::{WinitWindowAccessor, winit};
 use slint::{ModelRc, Timer, TimerMode, VecModel, Weak};
 
 slint::include_modules!();
@@ -319,6 +320,10 @@ impl AppState {
 }
 
 fn main() -> Result<(), slint::PlatformError> {
+    slint::BackendSelector::new()
+        .backend_name("winit".into())
+        .select()?;
+
     let app = AppWindow::new()?;
     let store = storage::DataStore::new().ok();
     let data = store
@@ -329,6 +334,7 @@ fn main() -> Result<(), slint::PlatformError> {
     let state = Rc::new(RefCell::new(AppState::new(data, store)));
     let undo_timer = Rc::new(RefCell::new(Timer::default()));
 
+    apply_always_on_top(&app, state.borrow().data.settings.always_on_top);
     refresh_ui(&app, &state.borrow());
 
     bind_callbacks(&app, state.clone(), undo_timer.clone());
@@ -466,11 +472,7 @@ fn bind_callbacks(app: &AppWindow, state: Rc<RefCell<AppState>>, undo_timer: Rc<
             if let Some(app) = app_weak.upgrade() {
                 let mut state = state.borrow_mut();
                 state.data.settings.always_on_top = !state.data.settings.always_on_top;
-                #[allow(deprecated)]
-                {
-                    app.window()
-                        .set_always_on_top(state.data.settings.always_on_top);
-                }
+                apply_always_on_top(&app, state.data.settings.always_on_top);
                 state.save();
                 refresh_ui(&app, &state);
             }
@@ -590,6 +592,18 @@ fn refresh_if_possible(app_weak: &Weak<AppWindow>, state: &AppState) {
     if let Some(app) = app_weak.upgrade() {
         refresh_ui(&app, state);
     }
+}
+
+fn apply_always_on_top(app: &AppWindow, enabled: bool) {
+    app.window()
+        .with_winit_window(|window: &winit::window::Window| {
+            let level = if enabled {
+                winit::window::WindowLevel::AlwaysOnTop
+            } else {
+                winit::window::WindowLevel::Normal
+            };
+            window.set_window_level(level);
+        });
 }
 
 fn refresh_ui(app: &AppWindow, state: &AppState) {

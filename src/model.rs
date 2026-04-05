@@ -21,16 +21,6 @@ pub enum TabPriority {
     Low,
 }
 
-impl TabPriority {
-    pub fn sort_weight(self) -> usize {
-        match self {
-            Self::High => 0,
-            Self::Normal => 1,
-            Self::Low => 2,
-        }
-    }
-}
-
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct TabSpec {
     pub name: String,

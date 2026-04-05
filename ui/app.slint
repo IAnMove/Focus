@@ -426,8 +426,6 @@ export component AppWindow inherits Window {
     title: app-title;
     width: 460px;
     height: 740px;
-    min-width: 360px;
-    min-height: 560px;
     background: #0b1120;
 
     property <color> panel: #121a2b;
@@ -755,7 +753,7 @@ export component AppWindow inherits Window {
 
                         for task[index] in root.tasks : TaskCard {
                             task: task;
-                            panel: index % 2 == 0 ? root.panel-soft : root.panel;
+                            panel: Math.mod(index, 2) == 0 ? root.panel-soft : root.panel;
                             panel-alt: root.panel-alt;
                             accent: root.accent;
                             border: root.border;
@@ -808,7 +806,7 @@ export component AppWindow inherits Window {
 
                         for entry[index] in root.history-items : HistoryCard {
                             entry: entry;
-                            panel: index % 2 == 0 ? root.panel-soft : root.panel;
+                            panel: Math.mod(index, 2) == 0 ? root.panel-soft : root.panel;
                             border: root.border;
                             accent: root.accent-warm;
                             text-main: root.text-main;
@@ -857,7 +855,7 @@ export component AppWindow inherits Window {
 
                         for tab[index] in root.managed-tabs : TabManagerCard {
                             tab: tab;
-                            panel: index % 2 == 0 ? root.panel-soft : root.panel;
+                            panel: Math.mod(index, 2) == 0 ? root.panel-soft : root.panel;
                             border: root.border;
                             text-main: root.text-main;
                             text-muted: root.text-muted;

@@ -1,7 +1,7 @@
 use std::env;
 use std::fs;
 use std::io;
-use std::path::{Path, PathBuf};
+use std::path::PathBuf;
 
 use chrono::Local;
 
@@ -19,12 +19,9 @@ impl DataStore {
         })
     }
 
+    #[cfg(test)]
     pub fn from_path(path: PathBuf) -> Self {
         Self { path }
-    }
-
-    pub fn path(&self) -> &Path {
-        &self.path
     }
 
     pub fn load(&self) -> AppData {
