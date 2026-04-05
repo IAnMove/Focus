@@ -14,6 +14,7 @@ slint::include_modules!();
 struct AppState {
     data: model::AppData,
     active_tab: String,
+    history_visible: bool,
     draft_title: String,
     draft_extra: String,
     editing_task_id: Option<u64>,
@@ -26,6 +27,7 @@ impl AppState {
         Self {
             data,
             active_tab: "All".to_string(),
+            history_visible: false,
             draft_title: String::new(),
             draft_extra: String::new(),
             editing_task_id: None,
@@ -172,6 +174,26 @@ impl AppState {
 
     fn select_tab(&mut self, name: String) {
         self.active_tab = name;
+        self.history_visible = false;
+    }
+
+    fn toggle_history(&mut self) {
+        self.history_visible = !self.history_visible;
+    }
+
+    fn restore_history(&mut self, task_id: u64) -> bool {
+        let Some(index) = self.data.history.iter().position(|task| task.id == task_id) else {
+            return false;
+        };
+
+        let mut item = self.data.history.remove(index);
+        item.done = false;
+        item.current = false;
+        item.completed_at.clear();
+        self.data.active.push(item);
+        self.history_visible = false;
+        self.save();
+        true
     }
 }
 
@@ -334,7 +356,27 @@ fn bind_callbacks(app: &AppWindow, state: Rc<RefCell<AppState>>, undo_timer: Rc<
         }
     });
 
-    app.on_show_history(|| {});
+    app.on_show_history({
+        let app_weak = app_weak.clone();
+        let state = state.clone();
+        move || {
+            let mut state = state.borrow_mut();
+            state.toggle_history();
+            refresh_if_possible(&app_weak, &state);
+        }
+    });
+
+    app.on_restore_history({
+        let app_weak = app_weak.clone();
+        let state = state.clone();
+        move |task_id| {
+            let mut state = state.borrow_mut();
+            if state.restore_history(task_id as u64) {
+                refresh_if_possible(&app_weak, &state);
+            }
+        }
+    });
+
     app.on_show_tools(|| {});
 }
 
@@ -347,6 +389,7 @@ fn refresh_if_possible(app_weak: &Weak<AppWindow>, state: &AppState) {
 fn refresh_ui(app: &AppWindow, state: &AppState) {
     let tabs = build_tab_views(&state.data, &state.active_tab);
     let tasks = build_task_views(&state.data, &state.active_tab);
+    let history_items = build_history_views(&state.data);
     let current = current_task(&state.data);
     let (done_today, done_month, done_year) = completion_counts(&state.data);
 
@@ -367,12 +410,14 @@ fn refresh_ui(app: &AppWindow, state: &AppState) {
     app.set_on_top_enabled(state.data.settings.always_on_top);
     app.set_tabs(ModelRc::new(VecModel::from(tabs)));
     app.set_tasks(ModelRc::new(VecModel::from(tasks)));
+    app.set_history_items(ModelRc::new(VecModel::from(history_items)));
     app.set_current_title(current.0.into());
     app.set_current_meta(current.1.into());
     app.set_draft_title(state.draft_title.clone().into());
     app.set_draft_extra(state.draft_extra.clone().into());
     app.set_editing_mode(state.editing_task_id.is_some());
     app.set_can_undo(state.undo_item.is_some());
+    app.set_history_visible(state.history_visible);
 }
 
 fn build_tab_views(data: &model::AppData, active_tab: &str) -> Vec<TabView> {
@@ -418,6 +463,20 @@ fn current_task(data: &model::AppData) -> (String, String) {
         .unwrap_or_else(|| (String::new(), String::new()))
 }
 
+fn build_history_views(data: &model::AppData) -> Vec<HistoryView> {
+    data.history
+        .iter()
+        .rev()
+        .map(|task| HistoryView {
+            id: task.id as i32,
+            title: task.text.clone().into(),
+            meta: history_meta(task).into(),
+            extra: task.extra_info.clone().into(),
+            has_extra: !task.extra_info.trim().is_empty(),
+        })
+        .collect()
+}
+
 fn visible_items<'a>(data: &'a model::AppData, active_tab: &str) -> Vec<&'a model::TaskItem> {
     let filtered: Vec<&model::TaskItem> = if active_tab == "All" {
         data.active.iter().collect()
@@ -456,6 +515,22 @@ fn due_label(task: &model::TaskItem) -> String {
     } else {
         format!("Due {}", task.due_date)
     }
+}
+
+fn history_meta(task: &model::TaskItem) -> String {
+    let mut parts = Vec::new();
+
+    if !task.tab.trim().is_empty() {
+        parts.push(task.tab.clone());
+    }
+    if !task.created_at.trim().is_empty() {
+        parts.push(format!("Created {}", task.created_at));
+    }
+    if !task.completed_at.trim().is_empty() {
+        parts.push(format!("Done {}", task.completed_at));
+    }
+
+    parts.join(" | ")
 }
 
 fn due_progress_ratio(task: &model::TaskItem) -> f32 {

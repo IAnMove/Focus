@@ -18,6 +18,14 @@ export struct TaskView {
     progress: float,
 }
 
+export struct HistoryView {
+    id: int,
+    title: string,
+    meta: string,
+    extra: string,
+    has_extra: bool,
+}
+
 component TagChip inherits Rectangle {
     in property <string> label;
     in property <bool> selected;
@@ -223,6 +231,70 @@ component TaskCard inherits Rectangle {
     }
 }
 
+component HistoryCard inherits Rectangle {
+    in property <HistoryView> entry;
+    in property <color> panel;
+    in property <color> border;
+    in property <color> accent;
+    in property <color> text-main;
+    in property <color> text-muted;
+    callback restore(task-id: int);
+
+    border-radius: 18px;
+    border-width: 1px;
+    border-color: border;
+    background: panel;
+    min-height: entry.has_extra ? 128px : 104px;
+
+    VerticalLayout {
+        padding: 14px;
+        spacing: 10px;
+
+        HorizontalLayout {
+            spacing: 10px;
+
+            Rectangle {
+                width: 18px;
+                height: 18px;
+                border-radius: 9px;
+                background: accent;
+            }
+
+            VerticalLayout {
+                spacing: 4px;
+                horizontal-stretch: 1;
+
+                Text {
+                    text: entry.title;
+                    color: text-main;
+                    wrap: word-wrap;
+                    font-size: 15px;
+                    font-weight: 600;
+                }
+
+                Text {
+                    text: entry.meta;
+                    color: text-muted;
+                    wrap: word-wrap;
+                    font-size: 11px;
+                }
+            }
+
+            Button {
+                text: "Restore";
+                clicked => { root.restore(entry.id); }
+            }
+        }
+
+        if (entry.has_extra) : Text {
+            text: entry.extra;
+            color: text-muted;
+            wrap: word-wrap;
+            font-size: 12px;
+        }
+    }
+}
+
 export component AppWindow inherits Window {
     in-out property <string> app-title: "focus";
     in-out property <string> status-text: "Loading";
@@ -233,6 +305,7 @@ export component AppWindow inherits Window {
     in-out property <string> active-tab-name: "All";
     in-out property <[TabView]> tabs: [];
     in-out property <[TaskView]> tasks: [];
+    in-out property <[HistoryView]> history-items: [];
     in-out property <int> pending-count: 0;
     in-out property <int> done-today-count: 0;
     in-out property <int> done-month-count: 0;
@@ -241,6 +314,7 @@ export component AppWindow inherits Window {
     in-out property <string> draft-extra: "";
     in-out property <bool> editing-mode: false;
     in-out property <bool> can-undo: false;
+    in-out property <bool> history-visible: false;
 
     callback add-task();
     callback show-history();
@@ -254,6 +328,7 @@ export component AppWindow inherits Window {
     callback delete-task(task-id: int);
     callback toggle-current(task-id: int);
     callback undo-complete();
+    callback restore-history(task-id: int);
 
     title: app-title;
     width: 460px;
@@ -317,7 +392,7 @@ export component AppWindow inherits Window {
                         spacing: 6px;
 
                         Button {
-                            text: "History";
+                            text: root.history-visible ? "Back" : "History";
                             clicked => { root.show-history(); }
                         }
 
@@ -426,6 +501,7 @@ export component AppWindow inherits Window {
             border-color: root.border;
             background: root.panel;
             height: 54px;
+            visible: !root.history-visible;
 
             HorizontalLayout {
                 padding: 9px;
@@ -459,6 +535,7 @@ export component AppWindow inherits Window {
             border-color: root.accent;
             background: root.panel-alt;
             min-height: 108px;
+            visible: !root.history-visible;
 
             VerticalLayout {
                 padding: 16px;
@@ -507,7 +584,7 @@ export component AppWindow inherits Window {
                         horizontal-stretch: 1;
 
                         Text {
-                            text: root.active-tab-name == "All" ? "All tasks" : root.active-tab-name;
+                            text: root.history-visible ? "History" : (root.active-tab-name == "All" ? "All tasks" : root.active-tab-name);
                             color: root.text-main;
                             font-size: 18px;
                             font-weight: 700;
@@ -543,7 +620,7 @@ export component AppWindow inherits Window {
                     background: root.border;
                 }
 
-                if (root.tasks.length == 0) : Rectangle {
+                if (!root.history-visible && root.tasks.length == 0) : Rectangle {
                     border-radius: 18px;
                     border-width: 1px;
                     border-color: root.border;
@@ -570,7 +647,7 @@ export component AppWindow inherits Window {
                     }
                 }
 
-                if (root.tasks.length > 0) : ScrollView {
+                if (!root.history-visible && root.tasks.length > 0) : ScrollView {
                     vertical-stretch: 1;
 
                     VerticalLayout {
@@ -589,6 +666,52 @@ export component AppWindow inherits Window {
                             edit(task-id) => { root.edit-task(task-id); }
                             remove(task-id) => { root.delete-task(task-id); }
                             toggle-current(task-id) => { root.toggle-current(task-id); }
+                        }
+                    }
+                }
+
+                if (root.history-visible && root.history-items.length == 0) : Rectangle {
+                    border-radius: 18px;
+                    border-width: 1px;
+                    border-color: root.border;
+                    background: root.panel-soft;
+                    vertical-stretch: 1;
+
+                    VerticalLayout {
+                        padding: 20px;
+                        spacing: 8px;
+
+                        Text {
+                            text: "No completed tasks yet";
+                            color: root.text-main;
+                            font-size: 18px;
+                            font-weight: 700;
+                        }
+
+                        Text {
+                            text: "Completed tasks will appear here and can be restored.";
+                            color: root.text-muted;
+                            wrap: word-wrap;
+                            font-size: 13px;
+                        }
+                    }
+                }
+
+                if (root.history-visible && root.history-items.length > 0) : ScrollView {
+                    vertical-stretch: 1;
+
+                    VerticalLayout {
+                        spacing: 10px;
+                        padding-right: 2px;
+
+                        for entry[index] in root.history-items : HistoryCard {
+                            entry: entry;
+                            panel: index % 2 == 0 ? root.panel-soft : root.panel;
+                            border: root.border;
+                            accent: root.accent-warm;
+                            text-main: root.text-main;
+                            text-muted: root.text-muted;
+                            restore(task-id) => { root.restore-history(task-id); }
                         }
                     }
                 }
