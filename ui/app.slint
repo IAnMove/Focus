@@ -1,54 +1,258 @@
+import { Button, ScrollView } from "std-widgets.slint";
+
+export struct TabView {
+    name: string,
+    priority: string,
+    selected: bool,
+}
+
+export struct TaskView {
+    id: int,
+    title: string,
+    meta: string,
+    due_label: string,
+    extra: string,
+    is_current: bool,
+    has_due_date: bool,
+    has_extra: bool,
+    progress: float,
+}
+
+component TagChip inherits Rectangle {
+    in property <string> label;
+    in property <bool> selected;
+    in property <color> accent;
+    in property <color> panel;
+    in property <color> text-main;
+    in property <color> text-muted;
+    callback pressed();
+
+    min-width: 68px;
+    height: 34px;
+    border-radius: 17px;
+    border-width: 1px;
+    border-color: selected ? accent : #25324e;
+    background: selected ? accent : panel;
+
+    Text {
+        x: 14px;
+        y: (parent.height - self.height) / 2;
+        text: label;
+        color: selected ? #08111f : text-muted;
+        font-size: 12px;
+        font-weight: selected ? 700 : 500;
+    }
+
+    TouchArea {
+        clicked => { root.pressed(); }
+    }
+}
+
+component MetricPill inherits Rectangle {
+    in property <string> label;
+    in property <int> value;
+    in property <color> panel;
+    in property <color> border;
+    in property <color> text-main;
+    in property <color> text-muted;
+
+    min-width: 84px;
+    height: 52px;
+    border-radius: 16px;
+    border-width: 1px;
+    border-color: border;
+    background: panel;
+
+    VerticalLayout {
+        padding: 10px;
+        spacing: 2px;
+
+        Text {
+            text: label;
+            color: text-muted;
+            font-size: 11px;
+        }
+
+        Text {
+            text: value + "";
+            color: text-main;
+            font-size: 18px;
+            font-weight: 700;
+        }
+    }
+}
+
+component TaskCard inherits Rectangle {
+    in property <TaskView> task;
+    in property <color> panel;
+    in property <color> panel-alt;
+    in property <color> accent;
+    in property <color> border;
+    in property <color> text-main;
+    in property <color> text-muted;
+
+    border-radius: 18px;
+    border-width: 1px;
+    border-color: task.is_current ? accent : border;
+    background: task.is_current ? panel-alt : panel;
+    min-height: task.has_extra ? 122px : 98px;
+
+    VerticalLayout {
+        padding: 14px;
+        spacing: 10px;
+
+        HorizontalLayout {
+            spacing: 10px;
+
+            Rectangle {
+                width: 18px;
+                height: 18px;
+                border-radius: 9px;
+                border-width: 2px;
+                border-color: task.is_current ? accent : text-muted;
+                background: transparent;
+            }
+
+            VerticalLayout {
+                spacing: 4px;
+                horizontal-stretch: 1;
+
+                Text {
+                    text: task.title;
+                    color: text-main;
+                    wrap: word-wrap;
+                    font-size: 15px;
+                    font-weight: task.is_current ? 700 : 600;
+                }
+
+                Text {
+                    text: task.meta;
+                    color: text-muted;
+                    font-size: 11px;
+                    wrap: word-wrap;
+                }
+            }
+
+            if (task.is_current) : Rectangle {
+                border-radius: 12px;
+                background: accent;
+                min-width: 66px;
+                height: 26px;
+
+                Text {
+                    x: 12px;
+                    y: (parent.height - self.height) / 2;
+                    text: "Current";
+                    color: #08111f;
+                    font-size: 11px;
+                    font-weight: 800;
+                }
+            }
+        }
+
+        if (task.has_due_date) : Rectangle {
+            border-radius: 10px;
+            border-width: 1px;
+            border-color: border;
+            background: #111827;
+            height: 30px;
+
+            Text {
+                x: 10px;
+                y: (parent.height - self.height) / 2;
+                text: task.due_label;
+                color: text-muted;
+                font-size: 11px;
+            }
+        }
+
+        if (task.has_due_date) : Rectangle {
+            border-radius: 4px;
+            background: #0f1728;
+            height: 8px;
+
+            Rectangle {
+                x: 0;
+                y: 0;
+                height: parent.height;
+                width: parent.width * task.progress;
+                border-radius: 4px;
+                background: accent;
+            }
+        }
+
+        if (task.has_extra) : Text {
+            text: task.extra;
+            color: text-muted;
+            wrap: word-wrap;
+            font-size: 12px;
+        }
+    }
+}
+
 export component AppWindow inherits Window {
     in-out property <string> app-title: "focus";
     in-out property <string> status-text: "Loading";
     in-out property <string> footer-text: "";
     in-out property <bool> on-top-enabled: true;
+    in-out property <string> current-title: "";
+    in-out property <string> current-meta: "";
+    in-out property <string> active-tab-name: "All";
+    in-out property <[TabView]> tabs: [];
+    in-out property <[TaskView]> tasks: [];
+    in-out property <int> pending-count: 0;
+    in-out property <int> done-today-count: 0;
+    in-out property <int> done-month-count: 0;
+    in-out property <int> done-year-count: 0;
 
     callback add-task();
     callback show-history();
     callback show-tools();
     callback toggle-on-top();
+    callback select-tab(name: string);
 
     title: app-title;
     width: 460px;
     height: 740px;
     min-width: 360px;
     min-height: 560px;
-    background: #0d1321;
+    background: #0b1120;
 
-    property <color> bg: #0d1321;
-    property <color> panel: #151d2f;
-    property <color> panel-2: #1b2740;
-    property <color> accent: #6fffe9;
-    property <color> accent-2: #ffd166;
-    property <color> text-main: #f5f7ff;
-    property <color> text-muted: #96a3bf;
-    property <color> border: #25324e;
-    property <color> success: #7bd389;
+    property <color> bg: #0b1120;
+    property <color> panel: #121a2b;
+    property <color> panel-alt: #17233a;
+    property <color> panel-soft: #0f1728;
+    property <color> accent: #75e6da;
+    property <color> accent-warm: #f7c873;
+    property <color> text-main: #f7f8fc;
+    property <color> text-muted: #94a3b8;
+    property <color> border: #24314d;
+    property <bool> has-current-task: current-title != "";
 
     VerticalLayout {
-        padding: 12px;
-        spacing: 10px;
+        padding: 14px;
+        spacing: 12px;
 
         Rectangle {
-            border-radius: 18px;
-            background: panel;
+            border-radius: 24px;
             border-width: 1px;
             border-color: border;
-            height: 56px;
+            background: panel;
+            height: 94px;
 
             HorizontalLayout {
-                padding: 10px;
-                spacing: 8px;
+                padding: 14px;
+                spacing: 10px;
 
                 VerticalLayout {
-                    spacing: 2px;
+                    spacing: 4px;
+                    horizontal-stretch: 1;
 
                     Text {
                         text: app-title;
                         color: text-main;
-                        font-size: 22px;
-                        font-weight: 700;
+                        font-size: 24px;
+                        font-weight: 800;
                     }
 
                     Text {
@@ -58,254 +262,238 @@ export component AppWindow inherits Window {
                     }
                 }
 
-                Rectangle {
-                    horizontal-stretch: 1;
-                    background: transparent;
-                }
+                VerticalLayout {
+                    spacing: 6px;
 
-                Button {
-                    text: "Add";
-                    clicked => { add-task(); }
-                }
+                    Button {
+                        text: "Add task";
+                        clicked => { add-task(); }
+                    }
 
-                Button {
-                    text: "History";
-                    clicked => { show-history(); }
-                }
+                    HorizontalLayout {
+                        spacing: 6px;
 
-                Button {
-                    text: on-top-enabled ? "Pinned" : "Pin";
-                    clicked => { toggle-on-top(); }
-                }
-            }
-        }
+                        Button {
+                            text: "History";
+                            clicked => { show-history(); }
+                        }
 
-        Rectangle {
-            border-radius: 16px;
-            background: panel;
-            border-width: 1px;
-            border-color: border;
-            height: 52px;
-
-            HorizontalLayout {
-                padding: 8px;
-                spacing: 8px;
-
-                for tab in ["All", "General", "Work", "Today"] : Button {
-                    text: tab;
+                        Button {
+                            text: on-top-enabled ? "Pinned" : "Pin";
+                            clicked => { toggle-on-top(); }
+                        }
+                    }
                 }
             }
         }
 
         HorizontalLayout {
-            spacing: 10px;
+            spacing: 8px;
 
-            Rectangle {
-                border-radius: 20px;
-                background: panel;
-                border-width: 1px;
-                border-color: border;
-                horizontal-stretch: 1;
-                vertical-stretch: 1;
-
-                VerticalLayout {
-                    padding: 12px;
-                    spacing: 10px;
-
-                    Rectangle {
-                        border-radius: 14px;
-                        background: panel-2;
-                        border-width: 1px;
-                        border-color: border;
-                        height: 96px;
-
-                        VerticalLayout {
-                            padding: 12px;
-                            spacing: 6px;
-
-                            Text {
-                                text: "Current task";
-                                color: accent;
-                                font-size: 12px;
-                                font-weight: 700;
-                            }
-
-                            Text {
-                                text: "Define the first Rust migration milestone";
-                                color: text-main;
-                                wrap: word-wrap;
-                                font-size: 18px;
-                                font-weight: 600;
-                            }
-
-                            Text {
-                                text: "Placeholder card for the Slint port";
-                                color: text-muted;
-                                font-size: 12px;
-                            }
-                        }
-                    }
-
-                    Rectangle {
-                        border-radius: 14px;
-                        background: #121a2b;
-                        border-width: 1px;
-                        border-color: border;
-                        vertical-stretch: 1;
-
-                        VerticalLayout {
-                            padding: 18px;
-                            spacing: 12px;
-
-                            Text {
-                                text: "Task list placeholder";
-                                color: text-main;
-                                font-size: 16px;
-                                font-weight: 600;
-                            }
-
-                            Text {
-                                text: "The next tasks will wire the Rust data model, persistence and task actions into this view.";
-                                color: text-muted;
-                                wrap: word-wrap;
-                                font-size: 13px;
-                            }
-
-                            Rectangle {
-                                height: 1px;
-                                background: border;
-                            }
-
-                            for item in [
-                                "Create Cargo + Slint scaffold",
-                                "Port task model and JSON storage",
-                                "Connect task CRUD and history"
-                            ] : Rectangle {
-                                border-radius: 12px;
-                                background: panel;
-                                border-width: 1px;
-                                border-color: border;
-                                height: 64px;
-
-                                HorizontalLayout {
-                                    padding: 10px;
-                                    spacing: 10px;
-
-                                    Rectangle {
-                                        width: 18px;
-                                        height: 18px;
-                                        border-radius: 9px;
-                                        border-width: 2px;
-                                        border-color: accent;
-                                        background: transparent;
-                                    }
-
-                                    VerticalLayout {
-                                        spacing: 4px;
-
-                                        Text {
-                                            text: item;
-                                            color: text-main;
-                                            font-size: 14px;
-                                            font-weight: 500;
-                                            wrap: word-wrap;
-                                        }
-
-                                        Text {
-                                            text: "Prepared as static UI placeholder";
-                                            color: text-muted;
-                                            font-size: 11px;
-                                        }
-                                    }
-                                }
-                            }
-                        }
-                    }
-                }
+            MetricPill {
+                label: "Pending";
+                value: pending-count;
+                panel: root.panel;
+                border: root.border;
+                text-main: root.text-main;
+                text-muted: root.text-muted;
             }
 
-            Rectangle {
-                width: 144px;
-                border-radius: 20px;
-                background: panel;
-                border-width: 1px;
-                border-color: border;
+            MetricPill {
+                label: "Today";
+                value: done-today-count;
+                panel: root.panel;
+                border: root.border;
+                text-main: root.text-main;
+                text-muted: root.text-muted;
+            }
 
-                VerticalLayout {
-                    padding: 12px;
-                    spacing: 10px;
+            MetricPill {
+                label: "Month";
+                value: done-month-count;
+                panel: root.panel;
+                border: root.border;
+                text-main: root.text-main;
+                text-muted: root.text-muted;
+            }
 
-                    Text {
-                        text: "Tools";
-                        color: text-main;
-                        font-size: 15px;
-                        font-weight: 600;
-                    }
+            MetricPill {
+                label: "Year";
+                value: done-year-count;
+                panel: root.panel;
+                border: root.border;
+                text-main: root.text-main;
+                text-muted: root.text-muted;
+            }
+        }
 
-                    Button {
-                        text: "Open tools";
-                        clicked => { show-tools(); }
-                    }
+        Rectangle {
+            border-radius: 20px;
+            border-width: 1px;
+            border-color: border;
+            background: panel;
+            height: 54px;
 
-                    Rectangle {
-                        border-radius: 12px;
-                        background: panel-2;
-                        border-width: 1px;
-                        border-color: border;
-                        height: 88px;
+            HorizontalLayout {
+                padding: 9px;
+                spacing: 8px;
 
-                        VerticalLayout {
-                            padding: 10px;
-                            spacing: 4px;
+                TagChip {
+                    label: "Tools";
+                    selected: false;
+                    accent: root.accent-warm;
+                    panel: root.panel-soft;
+                    text-main: root.text-main;
+                    text-muted: root.text-muted;
+                    pressed => { show-tools(); }
+                }
 
-                            Text {
-                                text: "Always on top";
-                                color: text-main;
-                                font-size: 12px;
-                                font-weight: 600;
-                            }
+                for tab in tabs : TagChip {
+                    label: tab.name;
+                    selected: tab.selected;
+                    accent: root.accent;
+                    panel: root.panel-soft;
+                    text-main: root.text-main;
+                    text-muted: root.text-muted;
+                    pressed => { select-tab(tab.name); }
+                }
+            }
+        }
 
-                            Text {
-                                text: on-top-enabled ? "Enabled by default" : "Disabled";
-                                color: on-top-enabled ? success : text-muted;
-                                font-size: 12px;
-                            }
+        if (has-current-task) : Rectangle {
+            border-radius: 24px;
+            border-width: 1px;
+            border-color: accent;
+            background: panel-alt;
+            min-height: 108px;
 
-                            Text {
-                                text: "This will be backed by persisted settings in a later task.";
-                                color: text-muted;
-                                font-size: 11px;
-                                wrap: word-wrap;
-                            }
-                        }
-                    }
+            VerticalLayout {
+                padding: 16px;
+                spacing: 6px;
+
+                Text {
+                    text: "Current task";
+                    color: accent;
+                    font-size: 12px;
+                    font-weight: 800;
+                }
+
+                Text {
+                    text: current-title;
+                    color: text-main;
+                    wrap: word-wrap;
+                    font-size: 20px;
+                    font-weight: 700;
+                }
+
+                Text {
+                    text: current-meta;
+                    color: text-muted;
+                    wrap: word-wrap;
+                    font-size: 12px;
                 }
             }
         }
 
         Rectangle {
-            border-radius: 16px;
-            background: panel;
+            border-radius: 24px;
             border-width: 1px;
             border-color: border;
-            height: 48px;
+            background: panel;
+            vertical-stretch: 1;
 
-            HorizontalLayout {
-                padding: 12px;
-                spacing: 8px;
+            VerticalLayout {
+                padding: 14px;
+                spacing: 10px;
 
-                Rectangle {
-                    width: 10px;
-                    height: 10px;
-                    border-radius: 5px;
-                    background: accent-2;
+                HorizontalLayout {
+                    spacing: 8px;
+
+                    VerticalLayout {
+                        spacing: 2px;
+                        horizontal-stretch: 1;
+
+                        Text {
+                            text: active-tab-name == "All" ? "All tasks" : active-tab-name;
+                            color: text-main;
+                            font-size: 18px;
+                            font-weight: 700;
+                        }
+
+                        Text {
+                            text: footer-text;
+                            color: text-muted;
+                            font-size: 12px;
+                            wrap: word-wrap;
+                        }
+                    }
+
+                    Rectangle {
+                        width: 40px;
+                        height: 40px;
+                        border-radius: 20px;
+                        background: accent-warm;
+
+                        Text {
+                            x: (parent.width - self.width) / 2;
+                            y: (parent.height - self.height) / 2;
+                            text: pending-count + "";
+                            color: #111827;
+                            font-size: 16px;
+                            font-weight: 800;
+                        }
+                    }
                 }
 
-                Text {
-                    text: footer-text;
-                    color: text-muted;
-                    font-size: 12px;
-                    vertical-alignment: center;
+                Rectangle {
+                    height: 1px;
+                    background: border;
+                }
+
+                if (tasks.length == 0) : Rectangle {
+                    border-radius: 18px;
+                    border-width: 1px;
+                    border-color: border;
+                    background: panel-soft;
+                    vertical-stretch: 1;
+
+                    VerticalLayout {
+                        padding: 20px;
+                        spacing: 8px;
+
+                        Text {
+                            text: "No tasks in this view";
+                            color: text-main;
+                            font-size: 18px;
+                            font-weight: 700;
+                        }
+
+                        Text {
+                            text: "The next task will connect add, complete and edit actions to this layout.";
+                            color: text-muted;
+                            wrap: word-wrap;
+                            font-size: 13px;
+                        }
+                    }
+                }
+
+                if (tasks.length > 0) : ScrollView {
+                    vertical-stretch: 1;
+
+                    VerticalLayout {
+                        spacing: 10px;
+                        padding-right: 2px;
+
+                        for task[index] in tasks : TaskCard {
+                            task: task;
+                            panel: index % 2 == 0 ? root.panel-soft : root.panel;
+                            panel-alt: root.panel-alt;
+                            accent: root.accent;
+                            border: root.border;
+                            text-main: root.text-main;
+                            text-muted: root.text-muted;
+                        }
+                    }
                 }
             }
         }
