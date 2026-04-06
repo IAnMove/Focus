@@ -71,6 +71,7 @@ component HeaderIconButton inherits Rectangle {
     in property <string> icon;
     in property <string> label;
     in property <bool> active;
+    in property <bool> enabled: true;
     in property <color> panel;
     in property <color> accent;
     in property <color> text-main;
@@ -107,6 +108,7 @@ component HeaderIconButton inherits Rectangle {
     }
 
     TouchArea {
+        enabled: root.enabled;
         clicked => { root.pressed(); }
     }
 }
@@ -445,7 +447,6 @@ export component AppWindow inherits Window {
     callback delete-tab(name: string);
     callback import-data();
     callback export-data();
-    callback set-header-actions-visible(show: bool);
 
     title: app-title;
     preferred-width: 460px;
@@ -464,7 +465,7 @@ export component AppWindow inherits Window {
     property <color> border: #24314d;
     property <bool> has-current-task: current-title != "";
     property <bool> main-visible: !history-visible && !tools-visible;
-    in-out property <bool> show-header-actions: false;
+    property <bool> header-hovered: header_hover.has-hover;
 
     VerticalLayout {
         padding: 14px;
@@ -483,14 +484,6 @@ export component AppWindow inherits Window {
                 y: 0;
                 width: parent.width;
                 height: parent.height;
-
-                changed has-hover => {
-                    if (self.has-hover) {
-                        root.set-header-actions-visible(true);
-                    } else {
-                        root.set-header-actions-visible(false);
-                    }
-                }
             }
 
             HorizontalLayout {
@@ -520,22 +513,7 @@ export component AppWindow inherits Window {
                     width: 232px;
                     height: parent.height;
                     background: transparent;
-                    visible: root.show-header-actions;
-
-                    header_actions_hover := TouchArea {
-                        x: 0;
-                        y: 0;
-                        width: parent.width;
-                        height: parent.height;
-
-                        changed has-hover => {
-                            if (self.has-hover) {
-                                root.set-header-actions-visible(true);
-                            } else {
-                                root.set-header-actions-visible(false);
-                            }
-                        }
-                    }
+                    opacity: root.header-hovered ? 1 : 0;
 
                     HorizontalLayout {
                         width: parent.width;
@@ -546,6 +524,7 @@ export component AppWindow inherits Window {
                             icon: "+";
                             label: "add";
                             active: root.draft-visible && root.main-visible;
+                            enabled: root.header-hovered;
                             panel: root.panel-alt;
                             accent: root.accent-warm;
                             text-main: root.text-main;
@@ -557,6 +536,7 @@ export component AppWindow inherits Window {
                             icon: root.history-visible ? "<" : "↺";
                             label: "history";
                             active: root.history-visible;
+                            enabled: root.header-hovered;
                             panel: root.panel-alt;
                             accent: root.accent-warm;
                             text-main: root.text-main;
@@ -568,6 +548,7 @@ export component AppWindow inherits Window {
                             icon: root.tools-visible ? "<" : "☰";
                             label: "tools";
                             active: root.tools-visible;
+                            enabled: root.header-hovered;
                             panel: root.panel-alt;
                             accent: root.accent-warm;
                             text-main: root.text-main;
@@ -579,6 +560,7 @@ export component AppWindow inherits Window {
                             icon: root.on-top-enabled ? "◉" : "◎";
                             label: "pin";
                             active: root.on-top-enabled;
+                            enabled: root.header-hovered;
                             panel: root.panel-alt;
                             accent: root.accent;
                             text-main: root.text-main;

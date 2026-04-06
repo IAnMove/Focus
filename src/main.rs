@@ -395,12 +395,11 @@ fn main() -> Result<(), slint::PlatformError> {
 
     let state = Rc::new(RefCell::new(AppState::new(data, store)));
     let undo_timer = Rc::new(RefCell::new(Timer::default()));
-    let header_timer = Rc::new(RefCell::new(Timer::default()));
 
     apply_always_on_top(&app, state.borrow().data.settings.always_on_top);
     refresh_ui(&app, &state.borrow());
 
-    bind_callbacks(&app, state.clone(), undo_timer.clone(), header_timer.clone());
+    bind_callbacks(&app, state.clone(), undo_timer.clone());
 
     let result = app.run();
 
@@ -412,38 +411,8 @@ fn main() -> Result<(), slint::PlatformError> {
     result
 }
 
-fn bind_callbacks(
-    app: &AppWindow,
-    state: Rc<RefCell<AppState>>,
-    undo_timer: Rc<RefCell<Timer>>,
-    header_timer: Rc<RefCell<Timer>>,
-) {
+fn bind_callbacks(app: &AppWindow, state: Rc<RefCell<AppState>>, undo_timer: Rc<RefCell<Timer>>) {
     let app_weak = app.as_weak();
-
-    app.on_set_header_actions_visible({
-        let app_weak = app_weak.clone();
-        let header_timer = header_timer.clone();
-        move |show| {
-            if show {
-                header_timer.borrow_mut().stop();
-                if let Some(app) = app_weak.upgrade() {
-                    app.set_show_header_actions(true);
-                }
-                return;
-            }
-
-            let app_for_timer = app_weak.clone();
-            header_timer.borrow_mut().start(
-                TimerMode::SingleShot,
-                Duration::from_millis(140),
-                move || {
-                    if let Some(app) = app_for_timer.upgrade() {
-                        app.set_show_header_actions(false);
-                    }
-                },
-            );
-        }
-    });
 
     app.on_add_task({
         let app_weak = app_weak.clone();

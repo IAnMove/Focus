@@ -69,7 +69,7 @@ Portar la aplicacion actual de checklist en Python a Rust usando Slint, mantenie
 - [x] 11. Probar compilacion, revisar paridad funcional y actualizar `README.md`.
 
 ## Tareas pendientes de paridad con `focus.py`
-- [ ] 12. Rehacer la cabecera para que muestre acciones de forma estable al entrar en el bloque del titulo y las oculte al salir, sin parpadeo ni perdida de clicks.
+- [x] 12. Rehacer la cabecera para que muestre acciones de forma estable al entrar en el bloque del titulo y las oculte al salir, sin parpadeo ni perdida de clicks.
 - [ ] 13. Rehacer las acciones por tarea con iconos compactos siempre visibles a la derecha y paso automatico a una fila inferior al reducir ancho.
 - [ ] 14. Corregir la interaccion de la fila de tarea para que funcionen `done`, `current`, `edit` y `delete` en todos los modos de ancho.
 - [ ] 15. Recuperar los presets visuales del script original: `warm`, `forest`, `ocean`, `rose` y `dark`.
@@ -93,4 +93,4 @@ Portar la aplicacion actual de checklist en Python a Rust usando Slint, mantenie
 - Hacer un commit por cada tarea completada.
 
 ## Siguiente paso
-Tarea 12: rehacer la cabecera para que muestre acciones estables al entrar en el bloque del titulo y las oculte al salir, sin parpadeo ni perdida de clicks.
+Tarea 13: rehacer las acciones por tarea con iconos compactos siempre visibles a la derecha y paso automatico a una fila inferior al reducir ancho.
