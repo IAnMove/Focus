@@ -85,6 +85,15 @@ Portar la aplicacion actual de checklist en Python a Rust usando Slint, mantenie
 - [ ] 25. Recuperar enlaces clicables dentro del texto de la tarea y el comportamiento asociado.
 - [ ] 26. Revisar paridad final de UX/UI frente a `focus.py` y actualizar `README.md` con el estado real.
 
+## Tareas de sincronizacion externa
+- [x] 27. Definir y documentar el esquema compartido de `focus-sync.json`, con ids estables, timestamps UTC y borrado logico.
+- [ ] 28. Extender los modelos Rust para soportar el archivo sincronizado y la configuracion local de cache + fuente externa.
+- [ ] 29. Implementar lectura y escritura de `focus-sync.json` usando el archivo local como cache interna.
+- [ ] 30. Anadir en `Tools` la configuracion opcional de sync externo y el boton manual `Sync` para descargar/recargar desde la fuente de verdad.
+- [ ] 31. Propagar de forma proactiva cada cambio local al archivo de sync cuando la opcion este activada.
+- [ ] 32. Implementar merge basico entre cache local y archivo externo con prioridad por `updated_at` y soporte de `deleted_at`.
+- [ ] 33. Documentar para Android el contrato de lectura/escritura y las reglas minimas de compatibilidad.
+
 ## Criterios de migracion
 - Mantener compatibilidad con Windows, macOS y Linux.
 - Evitar HTML, webview o soluciones embebidas de navegador.
@@ -93,4 +102,4 @@ Portar la aplicacion actual de checklist en Python a Rust usando Slint, mantenie
 - Hacer un commit por cada tarea completada.
 
 ## Siguiente paso
-Tarea 14: corregir la interaccion de la fila de tarea para que funcionen `done`, `current`, `edit` y `delete` en todos los modos de ancho.
+Tarea 28: extender los modelos Rust para soportar el archivo sincronizado y la configuracion local de cache + fuente externa.
