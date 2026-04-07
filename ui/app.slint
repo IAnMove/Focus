@@ -62,9 +62,33 @@ component TagChip inherits Rectangle {
     }
 }
 
-component TaskActionButton inherits Button {
-    in property <string> caption;
-    text: caption;
+component RowIconButton inherits Rectangle {
+    in property <string> icon;
+    in property <bool> active;
+    in property <color> panel;
+    in property <color> accent;
+    in property <color> text-main;
+    callback pressed();
+
+    width: 34px;
+    height: 34px;
+    border-radius: 10px;
+    border-width: 1px;
+    border-color: active ? accent : #2c3958;
+    background: active ? accent : panel;
+
+    Text {
+        x: (parent.width - self.width) / 2;
+        y: (parent.height - self.height) / 2;
+        text: icon;
+        color: active ? #08111f : text-main;
+        font-size: 15px;
+        font-weight: 700;
+    }
+
+    TouchArea {
+        clicked => { root.pressed(); }
+    }
 }
 
 component HeaderIconButton inherits Rectangle {
@@ -128,20 +152,13 @@ component TaskCard inherits Rectangle {
     callback move-up(task-id: int);
     callback move-down(task-id: int);
     callback cycle-tab(task-id: int);
-    property <bool> hovered: hover_area.has-hover;
+    in property <bool> compact-actions: false;
 
     border-radius: 18px;
     border-width: 1px;
     border-color: task.is_current ? accent : border;
     background: task.is_current ? panel-alt : panel;
-    min-height: task.has_extra ? 156px : 132px;
-
-    hover_area := TouchArea {
-        x: 0;
-        y: 0;
-        width: parent.width;
-        height: parent.height;
-    }
+    min-height: compact-actions ? (task.has_extra ? 188px : 164px) : (task.has_extra ? 156px : 132px);
 
     VerticalLayout {
         padding: 14px;
@@ -150,14 +167,14 @@ component TaskCard inherits Rectangle {
         HorizontalLayout {
             spacing: 10px;
 
-            Rectangle {
-                width: 18px;
-                height: 18px;
-                border-radius: 9px;
-                border-width: 2px;
-                border-color: task.is_current ? accent : text-muted;
-                background: transparent;
-            }
+                RowIconButton {
+                    icon: "✓";
+                    active: false;
+                    panel: panel;
+                    accent: accent;
+                    text-main: text-main;
+                    pressed => { root.complete(task.id); }
+                }
 
             VerticalLayout {
                 spacing: 4px;
@@ -179,19 +196,61 @@ component TaskCard inherits Rectangle {
                 }
             }
 
-            if (task.is_current) : Rectangle {
-                border-radius: 12px;
-                background: accent;
-                min-width: 66px;
-                height: 26px;
+            if (!root.compact-actions) : HorizontalLayout {
+                spacing: 6px;
 
-                Text {
-                    x: 12px;
-                    y: (parent.height - self.height) / 2;
-                    text: "Current";
-                    color: #08111f;
-                    font-size: 11px;
-                    font-weight: 800;
+                RowIconButton {
+                    icon: task.is_current ? "◉" : "◎";
+                    active: task.is_current;
+                    panel: panel;
+                    accent: accent;
+                    text-main: text-main;
+                    pressed => { root.toggle-current(task.id); }
+                }
+
+                RowIconButton {
+                    icon: "✎";
+                    active: false;
+                    panel: panel;
+                    accent: accent;
+                    text-main: text-main;
+                    pressed => { root.edit(task.id); }
+                }
+
+                RowIconButton {
+                    icon: "×";
+                    active: false;
+                    panel: panel;
+                    accent: accent;
+                    text-main: text-main;
+                    pressed => { root.remove(task.id); }
+                }
+
+                RowIconButton {
+                    icon: "↑";
+                    active: false;
+                    panel: panel;
+                    accent: accent;
+                    text-main: text-main;
+                    pressed => { root.move-up(task.id); }
+                }
+
+                RowIconButton {
+                    icon: "↓";
+                    active: false;
+                    panel: panel;
+                    accent: accent;
+                    text-main: text-main;
+                    pressed => { root.move-down(task.id); }
+                }
+
+                RowIconButton {
+                    icon: "↺";
+                    active: false;
+                    panel: panel;
+                    accent: accent;
+                    text-main: text-main;
+                    pressed => { root.cycle-tab(task.id); }
                 }
             }
         }
@@ -234,42 +293,61 @@ component TaskCard inherits Rectangle {
             font-size: 12px;
         }
 
-        if (root.hovered) : HorizontalLayout {
+        if (root.compact-actions) : HorizontalLayout {
             spacing: 6px;
 
-            TaskActionButton {
-                caption: "Done";
-                clicked => { root.complete(task.id); }
+            RowIconButton {
+                icon: task.is_current ? "◉" : "◎";
+                active: task.is_current;
+                panel: panel;
+                accent: accent;
+                text-main: text-main;
+                pressed => { root.toggle-current(task.id); }
             }
 
-            TaskActionButton {
-                caption: task.is_current ? "Unpin" : "Current";
-                clicked => { root.toggle-current(task.id); }
+            RowIconButton {
+                icon: "✎";
+                active: false;
+                panel: panel;
+                accent: accent;
+                text-main: text-main;
+                pressed => { root.edit(task.id); }
             }
 
-            TaskActionButton {
-                caption: "Edit";
-                clicked => { root.edit(task.id); }
+            RowIconButton {
+                icon: "×";
+                active: false;
+                panel: panel;
+                accent: accent;
+                text-main: text-main;
+                pressed => { root.remove(task.id); }
             }
 
-            TaskActionButton {
-                caption: "Delete";
-                clicked => { root.remove(task.id); }
+            RowIconButton {
+                icon: "↑";
+                active: false;
+                panel: panel;
+                accent: accent;
+                text-main: text-main;
+                pressed => { root.move-up(task.id); }
             }
 
-            TaskActionButton {
-                caption: "Up";
-                clicked => { root.move-up(task.id); }
+            RowIconButton {
+                icon: "↓";
+                active: false;
+                panel: panel;
+                accent: accent;
+                text-main: text-main;
+                pressed => { root.move-down(task.id); }
             }
 
-            TaskActionButton {
-                caption: "Down";
-                clicked => { root.move-down(task.id); }
-            }
-
-            TaskActionButton {
-                caption: "Next tab";
-                clicked => { root.cycle-tab(task.id); }
+            RowIconButton {
+                icon: "↺";
+                active: false;
+                panel: panel;
+                accent: accent;
+                text-main: text-main;
+                pressed => { root.cycle-tab(task.id); }
             }
         }
     }
@@ -466,6 +544,7 @@ export component AppWindow inherits Window {
     property <bool> has-current-task: current-title != "";
     property <bool> main-visible: !history-visible && !tools-visible;
     property <bool> header-hovered: header_hover.has-hover;
+    property <bool> compact-task-actions: self.width < 520px;
 
     VerticalLayout {
         padding: 14px;
@@ -683,6 +762,7 @@ export component AppWindow inherits Window {
 
                         for task[index] in root.tasks : TaskCard {
                             task: task;
+                            compact-actions: root.compact-task-actions;
                             panel: Math.mod(index, 2) == 0 ? root.panel-soft : root.panel;
                             panel-alt: root.panel-alt;
                             accent: root.accent;
