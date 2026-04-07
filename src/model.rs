@@ -6,6 +6,7 @@ use serde_json::Value;
 pub const APP_NAME: &str = "focus";
 pub const DEFAULT_THEME_NAME: &str = "warm";
 pub const GENERAL_TAB_NAME: &str = "General";
+pub const SYNC_SCHEMA_VERSION: u32 = 1;
 pub const DEFAULT_ITEM_TEXTS: [&str; 3] = [
     "Define the next concrete task",
     "Finish what is already in progress",
@@ -135,6 +136,8 @@ pub struct Settings {
     pub tab_visible_count: u8,
     #[serde(default = "default_always_on_top")]
     pub always_on_top: bool,
+    #[serde(default)]
+    pub sync: SyncConfig,
     #[serde(flatten)]
     pub extra: BTreeMap<String, Value>,
 }
@@ -150,6 +153,7 @@ impl Default for Settings {
             show_item_meta: default_show_item_meta(),
             tab_visible_count: default_tab_visible_count(),
             always_on_top: default_always_on_top(),
+            sync: SyncConfig::default(),
             extra: BTreeMap::new(),
         }
     }
@@ -163,6 +167,7 @@ impl Settings {
         }
         self.font_scale = self.font_scale.clamp(0.8, 1.8);
         self.tab_visible_count = self.tab_visible_count.clamp(2, 12);
+        self.sync = self.sync.normalized();
         self.custom_palette = self
             .custom_palette
             .into_iter()
@@ -175,6 +180,238 @@ impl Settings {
                 }
             })
             .collect();
+        self
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Default)]
+pub struct SyncConfig {
+    #[serde(default)]
+    pub enabled: bool,
+    #[serde(default)]
+    pub path: String,
+    #[serde(default)]
+    pub device_id: String,
+    #[serde(default)]
+    pub last_sync_at: String,
+}
+
+impl SyncConfig {
+    pub fn normalized(mut self) -> Self {
+        self.path = self.path.trim().to_string();
+        self.device_id = self.device_id.trim().to_string();
+        self.last_sync_at = self.last_sync_at.trim().to_string();
+        self
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Default)]
+pub struct SyncWriter {
+    #[serde(default)]
+    pub device_id: String,
+    #[serde(default)]
+    pub app_id: String,
+    #[serde(default)]
+    pub app_version: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Default)]
+#[serde(rename_all = "lowercase")]
+pub enum SyncTaskStatus {
+    #[default]
+    Active,
+    Completed,
+    Deleted,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Default)]
+pub struct SyncTabRecord {
+    pub id: String,
+    pub name: String,
+    #[serde(default)]
+    pub priority: TabPriority,
+    #[serde(default)]
+    pub order: i32,
+    #[serde(default)]
+    pub updated_at: String,
+    #[serde(default)]
+    pub deleted_at: Option<String>,
+}
+
+impl SyncTabRecord {
+    pub fn normalized(mut self) -> Option<Self> {
+        self.id = self.id.trim().to_string();
+        self.name = normalize_tab_name(&self.name);
+        self.updated_at = self.updated_at.trim().to_string();
+        self.deleted_at = self.deleted_at.map(|value| value.trim().to_string());
+        if self.id.is_empty() || self.name.is_empty() {
+            return None;
+        }
+        Some(self)
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Default)]
+pub struct SyncTaskRecord {
+    pub id: String,
+    pub text: String,
+    #[serde(default)]
+    pub status: SyncTaskStatus,
+    #[serde(default)]
+    pub tab_id: String,
+    #[serde(default)]
+    pub current: bool,
+    #[serde(default)]
+    pub order: i32,
+    #[serde(default)]
+    pub created_at: String,
+    #[serde(default)]
+    pub updated_at: String,
+    #[serde(default)]
+    pub completed_at: Option<String>,
+    #[serde(default)]
+    pub deleted_at: Option<String>,
+    #[serde(default)]
+    pub extra_info: String,
+    #[serde(default)]
+    pub due_date: Option<String>,
+}
+
+impl SyncTaskRecord {
+    pub fn normalized(mut self) -> Option<Self> {
+        self.id = self.id.trim().to_string();
+        self.text = self.text.trim().to_string();
+        self.tab_id = self.tab_id.trim().to_string();
+        self.created_at = self.created_at.trim().to_string();
+        self.updated_at = self.updated_at.trim().to_string();
+        self.completed_at = self.completed_at.map(|value| value.trim().to_string());
+        self.deleted_at = self.deleted_at.map(|value| value.trim().to_string());
+        self.extra_info = self.extra_info.trim().to_string();
+        self.due_date = self.due_date.map(|value| value.trim().to_string());
+        if self.id.is_empty() || self.text.is_empty() {
+            return None;
+        }
+        Some(self)
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct SyncPreferences {
+    #[serde(default = "default_theme_name")]
+    pub theme_name: String,
+    #[serde(default)]
+    pub custom_palette: BTreeMap<String, String>,
+    #[serde(default = "default_font_scale")]
+    pub font_scale: f32,
+    #[serde(default)]
+    pub accessibility_mode: bool,
+    #[serde(default = "default_show_item_meta")]
+    pub show_item_meta: bool,
+}
+
+impl Default for SyncPreferences {
+    fn default() -> Self {
+        Self {
+            theme_name: default_theme_name(),
+            custom_palette: BTreeMap::new(),
+            font_scale: default_font_scale(),
+            accessibility_mode: false,
+            show_item_meta: default_show_item_meta(),
+        }
+    }
+}
+
+impl SyncPreferences {
+    pub fn normalized(mut self) -> Self {
+        if self.theme_name.trim().is_empty() {
+            self.theme_name = default_theme_name();
+        }
+        self.font_scale = self.font_scale.clamp(0.8, 1.8);
+        self.custom_palette = self
+            .custom_palette
+            .into_iter()
+            .filter_map(|(key, value)| {
+                let value = value.trim().to_ascii_lowercase();
+                if is_hex_color(&value) {
+                    Some((key, value))
+                } else {
+                    None
+                }
+            })
+            .collect();
+        self
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
+pub struct SyncSharedData {
+    #[serde(default)]
+    pub tabs: Vec<SyncTabRecord>,
+    #[serde(default)]
+    pub tasks: Vec<SyncTaskRecord>,
+    #[serde(default)]
+    pub preferences: SyncPreferences,
+}
+
+impl SyncSharedData {
+    pub fn normalized(mut self) -> Self {
+        let mut seen_tabs = BTreeSet::new();
+        self.tabs = self
+            .tabs
+            .into_iter()
+            .filter_map(SyncTabRecord::normalized)
+            .filter(|tab| seen_tabs.insert(tab.id.clone()))
+            .collect();
+
+        let mut seen_tasks = BTreeSet::new();
+        self.tasks = self
+            .tasks
+            .into_iter()
+            .filter_map(SyncTaskRecord::normalized)
+            .filter(|task| seen_tasks.insert(task.id.clone()))
+            .collect();
+
+        self.preferences = self.preferences.normalized();
+        self
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct SyncFile {
+    #[serde(default = "default_sync_schema_version")]
+    pub schema_version: u32,
+    #[serde(default)]
+    pub updated_at: String,
+    #[serde(default)]
+    pub last_writer: SyncWriter,
+    #[serde(default)]
+    pub shared: SyncSharedData,
+    #[serde(flatten)]
+    pub extra: BTreeMap<String, Value>,
+}
+
+impl Default for SyncFile {
+    fn default() -> Self {
+        Self {
+            schema_version: default_sync_schema_version(),
+            updated_at: String::new(),
+            last_writer: SyncWriter::default(),
+            shared: SyncSharedData::default(),
+            extra: BTreeMap::new(),
+        }
+    }
+}
+
+impl SyncFile {
+    pub fn normalized(mut self) -> Self {
+        if self.schema_version == 0 {
+            self.schema_version = default_sync_schema_version();
+        }
+        self.updated_at = self.updated_at.trim().to_string();
+        self.last_writer.device_id = self.last_writer.device_id.trim().to_string();
+        self.last_writer.app_id = self.last_writer.app_id.trim().to_string();
+        self.last_writer.app_version = self.last_writer.app_version.trim().to_string();
+        self.shared = self.shared.normalized();
         self
     }
 }
@@ -239,6 +476,10 @@ impl AppData {
 
 pub fn default_theme_name() -> String {
     DEFAULT_THEME_NAME.to_string()
+}
+
+pub fn default_sync_schema_version() -> u32 {
+    SYNC_SCHEMA_VERSION
 }
 
 pub fn default_task_tab() -> String {
@@ -394,5 +635,80 @@ mod tests {
         assert_eq!(data.active[0].id, 1);
         assert_eq!(data.active[0].created_at, "2026-04-05 12:00");
         assert_eq!(data.settings.tabs[0].name, GENERAL_TAB_NAME);
+    }
+
+    #[test]
+    fn normalizes_local_sync_config() {
+        let config = SyncConfig {
+            enabled: true,
+            path: "  C:/sync/focus-sync.json  ".into(),
+            device_id: "  desktop-win11  ".into(),
+            last_sync_at: "  2026-04-07T20:41:12Z ".into(),
+        }
+        .normalized();
+
+        assert!(config.enabled);
+        assert_eq!(config.path, "C:/sync/focus-sync.json");
+        assert_eq!(config.device_id, "desktop-win11");
+        assert_eq!(config.last_sync_at, "2026-04-07T20:41:12Z");
+    }
+
+    #[test]
+    fn deserializes_shared_sync_payload() {
+        let raw = r##"
+        {
+          "schema_version": 1,
+          "updated_at": "2026-04-07T20:41:12Z",
+          "last_writer": {
+            "device_id": "desktop-win11-ina",
+            "app_id": "focus-desktop",
+            "app_version": "0.1.0"
+          },
+          "shared": {
+            "tabs": [
+              {
+                "id": "general",
+                "name": "General",
+                "priority": "normal",
+                "order": 0,
+                "updated_at": "2026-04-07T20:41:12Z",
+                "deleted_at": null
+              }
+            ],
+            "tasks": [
+              {
+                "id": "tsk_01",
+                "text": "Ship Android sync",
+                "status": "active",
+                "tab_id": "general",
+                "current": true,
+                "order": 0,
+                "created_at": "2026-04-07T20:10:00Z",
+                "updated_at": "2026-04-07T20:41:12Z",
+                "completed_at": null,
+                "deleted_at": null,
+                "extra_info": "",
+                "due_date": null
+              }
+            ],
+            "preferences": {
+              "theme_name": "warm",
+              "font_scale": 1.0,
+              "accessibility_mode": false,
+              "show_item_meta": true
+            }
+          }
+        }
+        "##;
+
+        let file: SyncFile = serde_json::from_str(raw).unwrap();
+        let normalized = file.normalized();
+
+        assert_eq!(normalized.schema_version, 1);
+        assert_eq!(normalized.shared.tabs.len(), 1);
+        assert_eq!(normalized.shared.tabs[0].id, "general");
+        assert_eq!(normalized.shared.tasks.len(), 1);
+        assert_eq!(normalized.shared.tasks[0].status, SyncTaskStatus::Active);
+        assert!(normalized.shared.tasks[0].current);
     }
 }
