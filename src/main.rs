@@ -358,6 +358,7 @@ impl AppState {
         }
 
         self.data.settings.tabs.push(model::TabSpec {
+            sync_id: model::tab_sync_id_from_name(&name),
             name: name.clone(),
             priority: model::TabPriority::Normal,
         });

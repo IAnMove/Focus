@@ -24,6 +24,8 @@ pub enum TabPriority {
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct TabSpec {
+    #[serde(default)]
+    pub sync_id: String,
     pub name: String,
     #[serde(default)]
     pub priority: TabPriority,
@@ -32,6 +34,7 @@ pub struct TabSpec {
 impl Default for TabSpec {
     fn default() -> Self {
         Self {
+            sync_id: default_general_tab_sync_id(),
             name: GENERAL_TAB_NAME.to_string(),
             priority: TabPriority::Normal,
         }
@@ -44,6 +47,11 @@ impl TabSpec {
         if self.name.is_empty() {
             return None;
         }
+        if self.sync_id.trim().is_empty() {
+            self.sync_id = tab_sync_id_from_name(&self.name);
+        } else {
+            self.sync_id = self.sync_id.trim().to_string();
+        }
         Some(self)
     }
 }
@@ -51,6 +59,8 @@ impl TabSpec {
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Default)]
 pub struct TaskItem {
     pub id: u64,
+    #[serde(default)]
+    pub sync_id: String,
     pub text: String,
     #[serde(default)]
     pub done: bool,
@@ -72,6 +82,7 @@ impl TaskItem {
     pub fn new(id: u64, text: impl Into<String>) -> Self {
         Self {
             id,
+            sync_id: task_sync_id_from_legacy_id(id),
             text: text.into().trim().to_string(),
             done: false,
             current: false,
@@ -91,6 +102,11 @@ impl TaskItem {
         if self.id == 0 {
             self.id = fallback_id;
         }
+        if self.sync_id.trim().is_empty() {
+            self.sync_id = task_sync_id_from_legacy_id(self.id);
+        } else {
+            self.sync_id = self.sync_id.trim().to_string();
+        }
         self.done = false;
         self.completed_at.clear();
         self.tab = normalize_tab_name(&self.tab);
@@ -107,6 +123,11 @@ impl TaskItem {
         }
         if self.id == 0 {
             self.id = fallback_id;
+        }
+        if self.sync_id.trim().is_empty() {
+            self.sync_id = task_sync_id_from_legacy_id(self.id);
+        } else {
+            self.sync_id = self.sync_id.trim().to_string();
         }
         self.done = true;
         self.current = false;
@@ -215,7 +236,7 @@ pub struct SyncWriter {
     pub app_version: String,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Default)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Default)]
 #[serde(rename_all = "lowercase")]
 pub enum SyncTaskStatus {
     #[default]
@@ -486,6 +507,10 @@ pub fn default_task_tab() -> String {
     GENERAL_TAB_NAME.to_string()
 }
 
+pub fn default_general_tab_sync_id() -> String {
+    "general".to_string()
+}
+
 pub fn default_tabs() -> Vec<TabSpec> {
     vec![TabSpec::default()]
 }
@@ -511,7 +536,7 @@ pub fn normalize_tabs(tabs: Vec<TabSpec>) -> Vec<TabSpec> {
     let mut normalized: Vec<TabSpec> = tabs
         .into_iter()
         .filter_map(TabSpec::normalized)
-        .filter(|tab| seen.insert(tab.name.clone()))
+        .filter(|tab| seen.insert(tab.sync_id.clone()))
         .collect();
 
     if normalized.is_empty() {
@@ -531,6 +556,35 @@ pub fn normalize_tab_name(value: &str) -> String {
     trimmed.chars().take(40).collect()
 }
 
+pub fn tab_sync_id_from_name(value: &str) -> String {
+    let normalized = normalize_tab_name(value);
+    if normalized.eq_ignore_ascii_case(GENERAL_TAB_NAME) {
+        return default_general_tab_sync_id();
+    }
+
+    let mut slug = String::new();
+    let mut last_dash = false;
+    for ch in normalized.chars().flat_map(|ch| ch.to_lowercase()) {
+        if ch.is_ascii_alphanumeric() {
+            slug.push(ch);
+            last_dash = false;
+        } else if !last_dash {
+            slug.push('-');
+            last_dash = true;
+        }
+    }
+    let trimmed = slug.trim_matches('-');
+    if trimmed.is_empty() {
+        default_general_tab_sync_id()
+    } else {
+        trimmed.to_string()
+    }
+}
+
+pub fn task_sync_id_from_legacy_id(id: u64) -> String {
+    format!("task-{id}")
+}
+
 fn is_hex_color(value: &str) -> bool {
     let bytes = value.as_bytes();
     bytes.len() == 7 && bytes[0] == b'#' && bytes[1..].iter().all(|byte| byte.is_ascii_hexdigit())
@@ -544,10 +598,12 @@ mod tests {
     fn normalizes_tab_names_and_inserts_general() {
         let tabs = vec![
             TabSpec {
+                sync_id: String::new(),
                 name: "   Work   Sprint   ".into(),
                 priority: TabPriority::High,
             },
             TabSpec {
+                sync_id: String::new(),
                 name: String::new(),
                 priority: TabPriority::Low,
             },
@@ -564,6 +620,7 @@ mod tests {
     fn normalizes_active_and_history_items() {
         let active = TaskItem {
             id: 0,
+            sync_id: String::new(),
             text: "  Ship Rust port  ".into(),
             done: true,
             current: true,
