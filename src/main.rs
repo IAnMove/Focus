@@ -9,7 +9,7 @@ use std::time::Duration;
 
 use chrono::{Datelike, Local, NaiveDate, NaiveDateTime};
 use slint::winit_030::{WinitWindowAccessor, winit};
-use slint::{ModelRc, Timer, TimerMode, VecModel, Weak};
+use slint::{Color, ModelRc, Timer, TimerMode, VecModel, Weak};
 
 slint::include_modules!();
 
@@ -34,6 +34,19 @@ struct AppState {
     editing_task_id: Option<u64>,
     undo_item: Option<model::TaskItem>,
     store: Option<storage::DataStore>,
+}
+
+#[derive(Debug, Clone, Copy)]
+struct ThemePalette {
+    bg: &'static str,
+    panel: &'static str,
+    panel_alt: &'static str,
+    panel_soft: &'static str,
+    text_main: &'static str,
+    text_muted: &'static str,
+    accent: &'static str,
+    border: &'static str,
+    accent_warm: &'static str,
 }
 
 impl AppState {
@@ -525,6 +538,20 @@ impl AppState {
             }
         }
     }
+
+    fn apply_theme_preset(&mut self, name: &str) -> bool {
+        let normalized = name.trim().to_ascii_lowercase();
+        match normalized.as_str() {
+            "warm" | "forest" | "ocean" | "rose" | "dark" => {
+                self.data.settings.theme_name = normalized.clone();
+                self.save();
+                self.set_tools_message(format!("Applied theme preset {}", normalized));
+                true
+            }
+            _ => false,
+        }
+    }
+
 }
 
 fn main() -> Result<(), slint::PlatformError> {
@@ -856,6 +883,17 @@ fn bind_callbacks(app: &AppWindow, state: Rc<RefCell<AppState>>, undo_timer: Rc<
         }
     });
 
+    app.on_apply_theme_preset({
+        let app_weak = app_weak.clone();
+        let state = state.clone();
+        move |name| {
+            let mut state = state.borrow_mut();
+            if state.apply_theme_preset(name.as_str()) {
+                refresh_if_possible(&app_weak, &state);
+            }
+        }
+    });
+
     app.on_save_sync_config({
         let app_weak = app_weak.clone();
         let state = state.clone();
@@ -917,6 +955,7 @@ fn refresh_ui(app: &AppWindow, state: &AppState) {
     let managed_tabs = build_managed_tabs(&state.data);
     let current = current_task(&state.data);
     let (done_today, done_month, done_year) = completion_counts(&state.data);
+    let palette = theme_palette(&state.data.settings.theme_name);
 
     app.set_status_text(
         format!(
@@ -926,6 +965,15 @@ fn refresh_ui(app: &AppWindow, state: &AppState) {
         )
         .into(),
     );
+    app.set_bg(parse_hex_color(palette.bg));
+    app.set_panel(parse_hex_color(palette.panel));
+    app.set_panel_alt(parse_hex_color(palette.panel_alt));
+    app.set_panel_soft(parse_hex_color(palette.panel_soft));
+    app.set_text_main(parse_hex_color(palette.text_main));
+    app.set_text_muted(parse_hex_color(palette.text_muted));
+    app.set_accent(parse_hex_color(palette.accent));
+    app.set_border(parse_hex_color(palette.border));
+    app.set_accent_warm(parse_hex_color(palette.accent_warm));
     app.set_footer_text(format_footer(&state.data, &state.active_tab).into());
     app.set_active_tab_name(state.active_tab.clone().into());
     app.set_pending_count(visible_items(&state.data, &state.active_tab).len() as i32);
@@ -959,6 +1007,74 @@ fn refresh_ui(app: &AppWindow, state: &AppState) {
     app.set_can_undo(state.undo_item.is_some());
     app.set_history_visible(state.history_visible);
     app.set_tools_visible(state.tools_visible);
+}
+
+fn theme_palette(name: &str) -> ThemePalette {
+    match name.trim().to_ascii_lowercase().as_str() {
+        "forest" => ThemePalette {
+            bg: "#bcd0bc",
+            panel: "#d4e8d4",
+            panel_alt: "#c8e0c8",
+            panel_soft: "#b0ccb0",
+            text_main: "#101e10",
+            text_muted: "#406040",
+            accent: "#2e8830",
+            border: "#98c098",
+            accent_warm: "#389838",
+        },
+        "ocean" => ThemePalette {
+            bg: "#b8cede",
+            panel: "#cce0f0",
+            panel_alt: "#c0d8ec",
+            panel_soft: "#a8c4d8",
+            text_main: "#080e18",
+            text_muted: "#305878",
+            accent: "#1468a0",
+            border: "#88b0cc",
+            accent_warm: "#1878b8",
+        },
+        "rose" => ThemePalette {
+            bg: "#e0c0c0",
+            panel: "#f4d8d8",
+            panel_alt: "#eccece",
+            panel_soft: "#d4aaaa",
+            text_main: "#200808",
+            text_muted: "#804040",
+            accent: "#b83040",
+            border: "#cc9898",
+            accent_warm: "#c83848",
+        },
+        "dark" => ThemePalette {
+            bg: "#141414",
+            panel: "#202020",
+            panel_alt: "#282828",
+            panel_soft: "#282420",
+            text_main: "#e4ddd4",
+            text_muted: "#888070",
+            accent: "#d4904a",
+            border: "#383028",
+            accent_warm: "#c07830",
+        },
+        _ => ThemePalette {
+            bg: "#e2d4c0",
+            panel: "#f0e8d8",
+            panel_alt: "#e8dcc8",
+            panel_soft: "#d4c4a8",
+            text_main: "#28180a",
+            text_muted: "#7a6448",
+            accent: "#c07828",
+            border: "#c8b898",
+            accent_warm: "#c07828",
+        },
+    }
+}
+
+fn parse_hex_color(value: &str) -> Color {
+    let value = value.trim_start_matches('#');
+    let r = u8::from_str_radix(&value[0..2], 16).unwrap_or(0);
+    let g = u8::from_str_radix(&value[2..4], 16).unwrap_or(0);
+    let b = u8::from_str_radix(&value[4..6], 16).unwrap_or(0);
+    Color::from_rgb_u8(r, g, b)
 }
 
 fn build_tab_views(

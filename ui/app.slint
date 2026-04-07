@@ -514,6 +514,7 @@ export component AppWindow inherits Window {
     callback delete-tab(name: string);
     callback import-data();
     callback export-data();
+    callback apply-theme-preset(name: string);
     callback save-sync-config();
     callback sync-now();
     callback shift-tabs-left();
@@ -525,16 +526,17 @@ export component AppWindow inherits Window {
     preferred-height: 740px;
     min-width: 360px;
     min-height: 520px;
-    background: #0b1120;
+    background: root.bg;
 
-    property <color> panel: #121a2b;
-    property <color> panel-alt: #17233a;
-    property <color> panel-soft: #0f1728;
-    property <color> accent: #75e6da;
-    property <color> accent-warm: #f7c873;
-    property <color> text-main: #f7f8fc;
-    property <color> text-muted: #94a3b8;
-    property <color> border: #24314d;
+    in-out property <color> bg: #0b1120;
+    in-out property <color> panel: #121a2b;
+    in-out property <color> panel-alt: #17233a;
+    in-out property <color> panel-soft: #0f1728;
+    in-out property <color> accent: #75e6da;
+    in-out property <color> accent-warm: #f7c873;
+    in-out property <color> text-main: #f7f8fc;
+    in-out property <color> text-muted: #94a3b8;
+    in-out property <color> border: #24314d;
     property <bool> has-current-task: current-title != "";
     property <bool> main-visible: !history-visible && !tools-visible;
     property <bool> header-hovered: header_hover.has-hover;
@@ -549,7 +551,7 @@ export component AppWindow inherits Window {
             border-radius: 24px;
             border-width: 1px;
             border-color: root.border;
-            background: #121b31;
+            background: root.panel-alt;
             height: 102px;
 
             header_hover := TouchArea {
@@ -955,6 +957,59 @@ export component AppWindow inherits Window {
                                 Button {
                                     text: "Create tab";
                                     clicked => { root.submit-tab(); }
+                                }
+                            }
+                        }
+
+                        Rectangle {
+                            border-radius: 18px;
+                            border-width: 1px;
+                            border-color: root.border;
+                            background: root.panel-soft;
+                            min-height: 128px;
+
+                            VerticalLayout {
+                                padding: 14px;
+                                spacing: 8px;
+
+                                Text {
+                                    text: "Appearance presets";
+                                    color: root.text-main;
+                                    font-size: 15px;
+                                    font-weight: 700;
+                                }
+
+                                HorizontalLayout {
+                                    spacing: 8px;
+
+                                    Button {
+                                        text: "Warm";
+                                        clicked => { root.apply-theme-preset("warm"); }
+                                    }
+
+                                    Button {
+                                        text: "Forest";
+                                        clicked => { root.apply-theme-preset("forest"); }
+                                    }
+
+                                    Button {
+                                        text: "Ocean";
+                                        clicked => { root.apply-theme-preset("ocean"); }
+                                    }
+                                }
+
+                                HorizontalLayout {
+                                    spacing: 8px;
+
+                                    Button {
+                                        text: "Rose";
+                                        clicked => { root.apply-theme-preset("rose"); }
+                                    }
+
+                                    Button {
+                                        text: "Dark";
+                                        clicked => { root.apply-theme-preset("dark"); }
+                                    }
                                 }
                             }
                         }
