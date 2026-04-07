@@ -497,6 +497,10 @@ export component AppWindow inherits Window {
     in-out property <string> draft-tab-name: "";
     in-out property <string> transfer-path: "";
     in-out property <string> tools-message: "";
+    in-out property <bool> sync-enabled: false;
+    in-out property <string> sync-path: "";
+    in-out property <string> sync-device-id: "";
+    in-out property <string> sync-message: "";
     in-out property <bool> editing-mode: false;
     in-out property <bool> draft-visible: false;
     in-out property <bool> can-undo: false;
@@ -528,6 +532,8 @@ export component AppWindow inherits Window {
     callback delete-tab(name: string);
     callback import-data();
     callback export-data();
+    callback save-sync-config();
+    callback sync-now();
     callback shift-tabs-left();
     callback shift-tabs-right();
     callback tab-strip-resized(width: float);
@@ -967,6 +973,69 @@ export component AppWindow inherits Window {
                                 Button {
                                     text: "Create tab";
                                     clicked => { root.submit-tab(); }
+                                }
+                            }
+                        }
+
+                        Rectangle {
+                            border-radius: 18px;
+                            border-width: 1px;
+                            border-color: root.border;
+                            background: root.panel-soft;
+                            min-height: 190px;
+
+                            VerticalLayout {
+                                padding: 14px;
+                                spacing: 8px;
+
+                                Text {
+                                    text: "External sync";
+                                    color: root.text-main;
+                                    font-size: 15px;
+                                    font-weight: 700;
+                                }
+
+                                Text {
+                                    text: "Optional shared source of truth for desktop and Android.";
+                                    color: root.text-muted;
+                                    wrap: word-wrap;
+                                    font-size: 12px;
+                                }
+
+                                LineEdit {
+                                    text <=> root.sync-path;
+                                    placeholder-text: "Path to focus-sync.json";
+                                }
+
+                                LineEdit {
+                                    text <=> root.sync-device-id;
+                                    placeholder-text: "Device id";
+                                }
+
+                                HorizontalLayout {
+                                    spacing: 8px;
+
+                                    Button {
+                                        text: root.sync-enabled ? "Sync enabled" : "Sync disabled";
+                                        clicked => { root.sync-enabled = !root.sync-enabled; }
+                                    }
+
+                                    Button {
+                                        text: "Save sync config";
+                                        clicked => { root.save-sync-config(); }
+                                    }
+
+                                    Button {
+                                        text: "Sync now";
+                                        clicked => { root.sync-now(); }
+                                    }
+                                }
+
+                                Text {
+                                    text: root.sync-message;
+                                    color: root.text-muted;
+                                    wrap: word-wrap;
+                                    font-size: 12px;
                                 }
                             }
                         }

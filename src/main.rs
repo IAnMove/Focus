@@ -26,6 +26,10 @@ struct AppState {
     draft_extra: String,
     draft_tab_name: String,
     transfer_path: String,
+    sync_enabled: bool,
+    sync_path: String,
+    sync_device_id: String,
+    sync_message: String,
     tools_message: String,
     editing_task_id: Option<u64>,
     undo_item: Option<model::TaskItem>,
@@ -34,6 +38,10 @@ struct AppState {
 
 impl AppState {
     fn new(data: model::AppData, store: Option<storage::DataStore>) -> Self {
+        let sync_enabled = data.settings.sync.enabled;
+        let sync_path = data.settings.sync.path.clone();
+        let sync_device_id = data.settings.sync.device_id.clone();
+
         Self {
             data,
             active_tab: "All".to_string(),
@@ -46,6 +54,10 @@ impl AppState {
             draft_extra: String::new(),
             draft_tab_name: String::new(),
             transfer_path: storage::default_export_path().display().to_string(),
+            sync_enabled,
+            sync_path,
+            sync_device_id,
+            sync_message: String::new(),
             tools_message: String::new(),
             editing_task_id: None,
             undo_item: None,
@@ -72,6 +84,10 @@ impl AppState {
 
     fn set_tools_message(&mut self, message: impl Into<String>) {
         self.tools_message = message.into();
+    }
+
+    fn set_sync_message(&mut self, message: impl Into<String>) {
+        self.sync_message = message.into();
     }
 
     fn submit_draft(&mut self) -> bool {
@@ -464,6 +480,51 @@ impl AppState {
             }
         }
     }
+
+    fn save_sync_config(&mut self) -> bool {
+        self.data.settings.sync.enabled = self.sync_enabled;
+        self.data.settings.sync.path = self.sync_path.trim().to_string();
+        self.data.settings.sync.device_id = self.sync_device_id.trim().to_string();
+        self.save();
+        self.set_sync_message("Sync settings saved locally.");
+        true
+    }
+
+    fn sync_now(&mut self) -> bool {
+        if !self.sync_enabled {
+            self.set_sync_message("Enable sync first.");
+            return false;
+        }
+
+        let path = self.sync_path.trim().to_string();
+        if path.is_empty() {
+            self.set_sync_message("Enter a path for focus-sync.json.");
+            return false;
+        }
+
+        let sync_path = PathBuf::from(&path);
+        match storage::load_sync_file_from_path(&sync_path) {
+            Ok(sync_file) => {
+                let mut local_settings = self.data.settings.clone();
+                local_settings.sync.enabled = self.sync_enabled;
+                local_settings.sync.path = path.clone();
+                local_settings.sync.device_id = self.sync_device_id.trim().to_string();
+                local_settings.sync.last_sync_at = storage::now_sync_stamp();
+
+                self.data = storage::sync_file_to_app_data(&sync_file, Some(&local_settings));
+                self.data.settings.sync = local_settings.sync.clone();
+                self.active_tab = "All".to_string();
+                self.clear_draft();
+                self.save();
+                self.set_sync_message(format!("Synced from {}", path));
+                true
+            }
+            Err(error) => {
+                self.set_sync_message(format!("Sync failed: {}", error));
+                false
+            }
+        }
+    }
 }
 
 fn main() -> Result<(), slint::PlatformError> {
@@ -794,6 +855,36 @@ fn bind_callbacks(app: &AppWindow, state: Rc<RefCell<AppState>>, undo_timer: Rc<
             refresh_if_possible(&app_weak, &state);
         }
     });
+
+    app.on_save_sync_config({
+        let app_weak = app_weak.clone();
+        let state = state.clone();
+        move || {
+            if let Some(app) = app_weak.upgrade() {
+                let mut state = state.borrow_mut();
+                state.sync_enabled = app.get_sync_enabled();
+                state.sync_path = app.get_sync_path().to_string();
+                state.sync_device_id = app.get_sync_device_id().to_string();
+                state.save_sync_config();
+                refresh_ui(&app, &state);
+            }
+        }
+    });
+
+    app.on_sync_now({
+        let app_weak = app_weak.clone();
+        let state = state.clone();
+        move || {
+            if let Some(app) = app_weak.upgrade() {
+                let mut state = state.borrow_mut();
+                state.sync_enabled = app.get_sync_enabled();
+                state.sync_path = app.get_sync_path().to_string();
+                state.sync_device_id = app.get_sync_device_id().to_string();
+                state.sync_now();
+                refresh_ui(&app, &state);
+            }
+        }
+    });
 }
 
 fn refresh_if_possible(app_weak: &Weak<AppWindow>, state: &AppState) {
@@ -859,6 +950,10 @@ fn refresh_ui(app: &AppWindow, state: &AppState) {
     app.set_draft_tab_name(state.draft_tab_name.clone().into());
     app.set_transfer_path(state.transfer_path.clone().into());
     app.set_tools_message(state.tools_message.clone().into());
+    app.set_sync_enabled(state.sync_enabled);
+    app.set_sync_path(state.sync_path.clone().into());
+    app.set_sync_device_id(state.sync_device_id.clone().into());
+    app.set_sync_message(state.sync_message.clone().into());
     app.set_editing_mode(state.editing_task_id.is_some());
     app.set_draft_visible(state.draft_visible);
     app.set_can_undo(state.undo_item.is_some());
