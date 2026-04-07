@@ -62,33 +62,15 @@ component TagChip inherits Rectangle {
     }
 }
 
-component RowIconButton inherits Rectangle {
-    in property <string> icon;
+component RowIconButton inherits Button {
+    in property <string> glyph;
     in property <bool> active;
     in property <color> panel;
     in property <color> accent;
     in property <color> text-main;
-    callback pressed();
-
-    width: 34px;
-    height: 34px;
-    border-radius: 10px;
-    border-width: 1px;
-    border-color: active ? accent : #2c3958;
-    background: active ? accent : panel;
-
-    Text {
-        x: (parent.width - self.width) / 2;
-        y: (parent.height - self.height) / 2;
-        text: icon;
-        color: active ? #08111f : text-main;
-        font-size: 15px;
-        font-weight: 700;
-    }
-
-    TouchArea {
-        clicked => { root.pressed(); }
-    }
+    text: self.glyph;
+    min-width: 36px;
+    min-height: 34px;
 }
 
 component HeaderIconButton inherits Rectangle {
@@ -168,12 +150,12 @@ component TaskCard inherits Rectangle {
             spacing: 10px;
 
                 RowIconButton {
-                    icon: "✓";
+                    glyph: "✓";
                     active: false;
                     panel: panel;
                     accent: accent;
                     text-main: text-main;
-                    pressed => { root.complete(task.id); }
+                    clicked => { root.complete(task.id); }
                 }
 
             VerticalLayout {
@@ -200,57 +182,57 @@ component TaskCard inherits Rectangle {
                 spacing: 6px;
 
                 RowIconButton {
-                    icon: task.is_current ? "◉" : "◎";
+                    glyph: task.is_current ? "◉" : "◎";
                     active: task.is_current;
                     panel: panel;
                     accent: accent;
                     text-main: text-main;
-                    pressed => { root.toggle-current(task.id); }
+                    clicked => { root.toggle-current(task.id); }
                 }
 
                 RowIconButton {
-                    icon: "✎";
+                    glyph: "✎";
                     active: false;
                     panel: panel;
                     accent: accent;
                     text-main: text-main;
-                    pressed => { root.edit(task.id); }
+                    clicked => { root.edit(task.id); }
                 }
 
                 RowIconButton {
-                    icon: "×";
+                    glyph: "×";
                     active: false;
                     panel: panel;
                     accent: accent;
                     text-main: text-main;
-                    pressed => { root.remove(task.id); }
+                    clicked => { root.remove(task.id); }
                 }
 
                 RowIconButton {
-                    icon: "↑";
+                    glyph: "↑";
                     active: false;
                     panel: panel;
                     accent: accent;
                     text-main: text-main;
-                    pressed => { root.move-up(task.id); }
+                    clicked => { root.move-up(task.id); }
                 }
 
                 RowIconButton {
-                    icon: "↓";
+                    glyph: "↓";
                     active: false;
                     panel: panel;
                     accent: accent;
                     text-main: text-main;
-                    pressed => { root.move-down(task.id); }
+                    clicked => { root.move-down(task.id); }
                 }
 
                 RowIconButton {
-                    icon: "↺";
+                    glyph: "↺";
                     active: false;
                     panel: panel;
                     accent: accent;
                     text-main: text-main;
-                    pressed => { root.cycle-tab(task.id); }
+                    clicked => { root.cycle-tab(task.id); }
                 }
             }
         }
@@ -297,57 +279,57 @@ component TaskCard inherits Rectangle {
             spacing: 6px;
 
             RowIconButton {
-                icon: task.is_current ? "◉" : "◎";
+                glyph: task.is_current ? "◉" : "◎";
                 active: task.is_current;
                 panel: panel;
                 accent: accent;
                 text-main: text-main;
-                pressed => { root.toggle-current(task.id); }
+                clicked => { root.toggle-current(task.id); }
             }
 
             RowIconButton {
-                icon: "✎";
+                glyph: "✎";
                 active: false;
                 panel: panel;
                 accent: accent;
                 text-main: text-main;
-                pressed => { root.edit(task.id); }
+                clicked => { root.edit(task.id); }
             }
 
             RowIconButton {
-                icon: "×";
+                glyph: "×";
                 active: false;
                 panel: panel;
                 accent: accent;
                 text-main: text-main;
-                pressed => { root.remove(task.id); }
+                clicked => { root.remove(task.id); }
             }
 
             RowIconButton {
-                icon: "↑";
+                glyph: "↑";
                 active: false;
                 panel: panel;
                 accent: accent;
                 text-main: text-main;
-                pressed => { root.move-up(task.id); }
+                clicked => { root.move-up(task.id); }
             }
 
             RowIconButton {
-                icon: "↓";
+                glyph: "↓";
                 active: false;
                 panel: panel;
                 accent: accent;
                 text-main: text-main;
-                pressed => { root.move-down(task.id); }
+                clicked => { root.move-down(task.id); }
             }
 
             RowIconButton {
-                icon: "↺";
+                glyph: "↺";
                 active: false;
                 panel: panel;
                 accent: accent;
                 text-main: text-main;
-                pressed => { root.cycle-tab(task.id); }
+                clicked => { root.cycle-tab(task.id); }
             }
         }
     }
