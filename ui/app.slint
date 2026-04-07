@@ -502,6 +502,9 @@ export component AppWindow inherits Window {
     in-out property <bool> can-undo: false;
     in-out property <bool> history-visible: false;
     in-out property <bool> tools-visible: false;
+    in-out property <bool> tab-overflow: false;
+    in-out property <bool> can-shift-tabs-left: false;
+    in-out property <bool> can-shift-tabs-right: false;
 
     callback add-task();
     callback show-history();
@@ -525,6 +528,9 @@ export component AppWindow inherits Window {
     callback delete-tab(name: string);
     callback import-data();
     callback export-data();
+    callback shift-tabs-left();
+    callback shift-tabs-right();
+    callback tab-strip-resized(width: float);
 
     title: app-title;
     preferred-width: 460px;
@@ -710,6 +716,32 @@ export component AppWindow inherits Window {
                 HorizontalLayout {
                     spacing: 8px;
 
+                    if (root.tab-overflow) : HeaderIconButton {
+                        icon: "←";
+                        label: "";
+                        active: false;
+                        enabled: root.can-shift-tabs-left;
+                        panel: root.panel-soft;
+                        accent: root.accent;
+                        text-main: root.text-main;
+                        text-muted: root.text-muted;
+                        pressed => { root.shift-tabs-left(); }
+                    }
+
+                    Rectangle {
+                        horizontal-stretch: 1;
+                        height: 34px;
+                        background: transparent;
+
+                        changed width => {
+                            root.tab-strip-resized(self.width / 1px);
+                        }
+
+                        HorizontalLayout {
+                            width: parent.width;
+                            height: parent.height;
+                            spacing: 8px;
+
                     for tab in root.tabs : TagChip {
                         label: tab.name;
                         selected: tab.selected;
@@ -718,6 +750,20 @@ export component AppWindow inherits Window {
                         text-main: root.text-main;
                         text-muted: root.text-muted;
                         pressed => { root.select-tab(tab.name); }
+                    }
+                        }
+                    }
+
+                    if (root.tab-overflow) : HeaderIconButton {
+                        icon: "→";
+                        label: "";
+                        active: false;
+                        enabled: root.can-shift-tabs-right;
+                        panel: root.panel-soft;
+                        accent: root.accent;
+                        text-main: root.text-main;
+                        text-muted: root.text-muted;
+                        pressed => { root.shift-tabs-right(); }
                     }
                 }
 

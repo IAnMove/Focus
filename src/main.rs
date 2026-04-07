@@ -17,6 +17,8 @@ slint::include_modules!();
 struct AppState {
     data: model::AppData,
     active_tab: String,
+    tab_window_start: usize,
+    visible_tab_count: usize,
     history_visible: bool,
     tools_visible: bool,
     draft_visible: bool,
@@ -35,6 +37,8 @@ impl AppState {
         Self {
             data,
             active_tab: "All".to_string(),
+            tab_window_start: 0,
+            visible_tab_count: 3,
             history_visible: false,
             tools_visible: false,
             draft_visible: false,
@@ -199,6 +203,7 @@ impl AppState {
 
     fn select_tab(&mut self, name: String) {
         self.active_tab = name;
+        self.ensure_active_tab_visible();
         self.history_visible = false;
         self.tools_visible = false;
     }
@@ -217,6 +222,83 @@ impl AppState {
             self.history_visible = false;
             self.draft_visible = false;
         }
+    }
+
+    fn update_tab_strip_width(&mut self, width: f32) {
+        let configured = self.data.settings.tab_visible_count.clamp(2, 12) as usize;
+        self.visible_tab_count = if width < 380.0 {
+            1
+        } else if width < 470.0 {
+            2
+        } else if width < 620.0 {
+            3
+        } else {
+            configured
+        };
+        self.clamp_tab_window();
+        self.ensure_active_tab_visible();
+    }
+
+    fn clamp_tab_window(&mut self) {
+        let tab_len = self.data.settings.tabs.len();
+        let max_start = tab_len.saturating_sub(self.visible_tab_count.max(1));
+        self.tab_window_start = self.tab_window_start.min(max_start);
+    }
+
+    fn ensure_active_tab_visible(&mut self) {
+        if self.active_tab == "All" {
+            self.clamp_tab_window();
+            return;
+        }
+
+        let Some(index) = self
+            .data
+            .settings
+            .tabs
+            .iter()
+            .position(|tab| tab.name == self.active_tab)
+        else {
+            self.clamp_tab_window();
+            return;
+        };
+
+        if index < self.tab_window_start {
+            self.tab_window_start = index;
+        } else if index >= self.tab_window_start + self.visible_tab_count.max(1) {
+            self.tab_window_start = index + 1 - self.visible_tab_count.max(1);
+        }
+
+        self.clamp_tab_window();
+    }
+
+    fn shift_tab_window(&mut self, direction: isize) {
+        if self.data.settings.tabs.is_empty() {
+            return;
+        }
+
+        let names: Vec<String> = self
+            .data
+            .settings
+            .tabs
+            .iter()
+            .map(|tab| tab.name.clone())
+            .collect();
+
+        let current_index = if self.active_tab == "All" {
+            if direction > 0 { -1 } else { 0 }
+        } else {
+            names
+                .iter()
+                .position(|name| name == &self.active_tab)
+                .map(|index| index as isize)
+                .unwrap_or(if direction > 0 { -1 } else { 0 })
+        };
+
+        let target_index = (current_index + direction).clamp(0, names.len() as isize - 1) as usize;
+        self.active_tab = names[target_index].clone();
+        self.ensure_active_tab_visible();
+        self.history_visible = false;
+        self.tools_visible = false;
     }
 
     fn restore_history(&mut self, task_id: u64) -> bool {
@@ -280,6 +362,7 @@ impl AppState {
             priority: model::TabPriority::Normal,
         });
         self.active_tab = name;
+        self.ensure_active_tab_visible();
         self.clear_tab_draft();
         self.save();
         true
@@ -332,6 +415,7 @@ impl AppState {
             self.active_tab = "All".to_string();
         }
 
+        self.clamp_tab_window();
         self.save();
         true
     }
@@ -456,6 +540,38 @@ fn bind_callbacks(app: &AppWindow, state: Rc<RefCell<AppState>>, undo_timer: Rc<
             let mut state = state.borrow_mut();
             state.select_tab(name.to_string());
             audio::play_click();
+            refresh_if_possible(&app_weak, &state);
+        }
+    });
+
+    app.on_shift_tabs_left({
+        let app_weak = app_weak.clone();
+        let state = state.clone();
+        move || {
+            let mut state = state.borrow_mut();
+            state.shift_tab_window(-1);
+            audio::play_click();
+            refresh_if_possible(&app_weak, &state);
+        }
+    });
+
+    app.on_shift_tabs_right({
+        let app_weak = app_weak.clone();
+        let state = state.clone();
+        move || {
+            let mut state = state.borrow_mut();
+            state.shift_tab_window(1);
+            audio::play_click();
+            refresh_if_possible(&app_weak, &state);
+        }
+    });
+
+    app.on_tab_strip_resized({
+        let app_weak = app_weak.clone();
+        let state = state.clone();
+        move |width| {
+            let mut state = state.borrow_mut();
+            state.update_tab_strip_width(width);
             refresh_if_possible(&app_weak, &state);
         }
     });
@@ -698,7 +814,12 @@ fn apply_always_on_top(app: &AppWindow, enabled: bool) {
 }
 
 fn refresh_ui(app: &AppWindow, state: &AppState) {
-    let tabs = build_tab_views(&state.data, &state.active_tab);
+    let tabs = build_tab_views(
+        &state.data,
+        &state.active_tab,
+        state.tab_window_start,
+        state.visible_tab_count,
+    );
     let tasks = build_task_views(&state.data, &state.active_tab);
     let history_items = build_history_views(&state.data);
     let managed_tabs = build_managed_tabs(&state.data);
@@ -720,6 +841,12 @@ fn refresh_ui(app: &AppWindow, state: &AppState) {
     app.set_done_month_count(done_month as i32);
     app.set_done_year_count(done_year as i32);
     app.set_on_top_enabled(state.data.settings.always_on_top);
+    let tab_overflow = state.data.settings.tabs.len() > state.visible_tab_count.max(1);
+    app.set_tab_overflow(tab_overflow);
+    app.set_can_shift_tabs_left(state.tab_window_start > 0);
+    app.set_can_shift_tabs_right(
+        state.tab_window_start + state.visible_tab_count.max(1) < state.data.settings.tabs.len(),
+    );
     app.set_tabs(ModelRc::new(VecModel::from(tabs)));
     app.set_tasks(ModelRc::new(VecModel::from(tasks)));
     app.set_history_items(ModelRc::new(VecModel::from(history_items)));
@@ -738,19 +865,31 @@ fn refresh_ui(app: &AppWindow, state: &AppState) {
     app.set_tools_visible(state.tools_visible);
 }
 
-fn build_tab_views(data: &model::AppData, active_tab: &str) -> Vec<TabView> {
-    let mut tabs = Vec::with_capacity(data.settings.tabs.len() + 1);
+fn build_tab_views(
+    data: &model::AppData,
+    active_tab: &str,
+    start: usize,
+    visible_count: usize,
+) -> Vec<TabView> {
+    let mut tabs = Vec::with_capacity(visible_count.max(1) + 1);
     tabs.push(TabView {
         name: "All".into(),
         priority: "all".into(),
         selected: active_tab == "All",
     });
 
-    tabs.extend(data.settings.tabs.iter().map(|tab| TabView {
+    tabs.extend(
+        data.settings
+            .tabs
+            .iter()
+            .skip(start)
+            .take(visible_count.max(1))
+            .map(|tab| TabView {
         name: tab.name.clone().into(),
         priority: format!("{:?}", tab.priority).to_lowercase().into(),
         selected: tab.name == active_tab,
-    }));
+    }),
+    );
 
     tabs
 }
