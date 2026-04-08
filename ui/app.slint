@@ -82,6 +82,7 @@ component HeaderIconButton inherits Rectangle {
     in property <color> accent;
     in property <color> text-main;
     in property <color> text-muted;
+    out property <bool> hovered: hitbox.has-hover;
     callback pressed();
 
     width: 52px;
@@ -113,7 +114,7 @@ component HeaderIconButton inherits Rectangle {
         }
     }
 
-    TouchArea {
+    hitbox := TouchArea {
         enabled: root.enabled;
         clicked => { root.pressed(); }
     }
@@ -539,7 +540,6 @@ export component AppWindow inherits Window {
     in-out property <color> border: #24314d;
     property <bool> has-current-task: current-title != "";
     property <bool> main-visible: !history-visible && !tools-visible;
-    property <bool> header-hovered: header_hover.has-hover;
     property <bool> compact-task-actions: self.width < 520px;
 
     VerticalLayout {
@@ -554,33 +554,39 @@ export component AppWindow inherits Window {
             background: root.panel-alt;
             height: 102px;
 
-            header_hover := TouchArea {
-                x: 0;
-                y: 0;
-                width: parent.width;
-                height: parent.height;
-            }
-
             HorizontalLayout {
                 padding: 16px;
                 spacing: 12px;
 
-                VerticalLayout {
-                    spacing: 4px;
+                title_block := Rectangle {
                     horizontal-stretch: 1;
+                    background: transparent;
 
-                    Text {
-                        text: root.app-title;
-                        color: root.text-main;
-                        font-size: 24px;
-                        font-weight: 800;
+                    title_hover := TouchArea {
+                        x: 0;
+                        y: 0;
+                        width: parent.width;
+                        height: parent.height;
                     }
 
-                    Text {
-                        text: root.status-text;
-                        color: root.text-muted;
-                        font-size: 12px;
-                        wrap: word-wrap;
+                    VerticalLayout {
+                        width: parent.width;
+                        height: parent.height;
+                        spacing: 4px;
+
+                        Text {
+                            text: root.app-title;
+                            color: root.text-main;
+                            font-size: 24px;
+                            font-weight: 800;
+                        }
+
+                        Text {
+                            text: root.status-text;
+                            color: root.text-muted;
+                            font-size: 12px;
+                            wrap: word-wrap;
+                        }
                     }
                 }
 
@@ -588,18 +594,18 @@ export component AppWindow inherits Window {
                     width: 232px;
                     height: parent.height;
                     background: transparent;
-                    opacity: root.header-hovered ? 1 : 0;
+                    opacity: title_hover.has-hover || add_action.hovered || history_action.hovered || tools_action.hovered || pin_action.hovered ? 1 : 0;
 
                     HorizontalLayout {
                         width: parent.width;
                         height: parent.height;
                         spacing: 6px;
 
-                        HeaderIconButton {
+                        add_action := HeaderIconButton {
                             icon: "+";
                             label: "add";
                             active: root.draft-visible && root.main-visible;
-                            enabled: root.header-hovered;
+                            enabled: title_hover.has-hover || self.hovered || history_action.hovered || tools_action.hovered || pin_action.hovered;
                             panel: root.panel-alt;
                             accent: root.accent-warm;
                             text-main: root.text-main;
@@ -607,11 +613,11 @@ export component AppWindow inherits Window {
                             pressed => { root.add-task(); }
                         }
 
-                        HeaderIconButton {
+                        history_action := HeaderIconButton {
                             icon: root.history-visible ? "<" : "↺";
                             label: "history";
                             active: root.history-visible;
-                            enabled: root.header-hovered;
+                            enabled: title_hover.has-hover || add_action.hovered || self.hovered || tools_action.hovered || pin_action.hovered;
                             panel: root.panel-alt;
                             accent: root.accent-warm;
                             text-main: root.text-main;
@@ -619,11 +625,11 @@ export component AppWindow inherits Window {
                             pressed => { root.show-history(); }
                         }
 
-                        HeaderIconButton {
+                        tools_action := HeaderIconButton {
                             icon: root.tools-visible ? "<" : "☰";
                             label: "tools";
                             active: root.tools-visible;
-                            enabled: root.header-hovered;
+                            enabled: title_hover.has-hover || add_action.hovered || history_action.hovered || self.hovered || pin_action.hovered;
                             panel: root.panel-alt;
                             accent: root.accent-warm;
                             text-main: root.text-main;
@@ -631,11 +637,11 @@ export component AppWindow inherits Window {
                             pressed => { root.show-tools(); }
                         }
 
-                        HeaderIconButton {
+                        pin_action := HeaderIconButton {
                             icon: root.on-top-enabled ? "◉" : "◎";
                             label: "pin";
                             active: root.on-top-enabled;
-                            enabled: root.header-hovered;
+                            enabled: title_hover.has-hover || add_action.hovered || history_action.hovered || tools_action.hovered || self.hovered;
                             panel: root.panel-alt;
                             accent: root.accent;
                             text-main: root.text-main;
