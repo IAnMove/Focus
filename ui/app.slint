@@ -627,7 +627,7 @@ export component AppWindow inherits Window {
                             font-weight: 800;
                         }
 
-                        Text {
+                        if (root.status-text != "") : Text {
                             text: root.status-text;
                             color: root.text-muted;
                             font-size: root.font-body;

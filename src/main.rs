@@ -1049,14 +1049,7 @@ fn refresh_ui(app: &AppWindow, state: &AppState) {
     let (done_today, done_month, done_year) = completion_counts(&state.data);
     let palette = theme_palette(&state.data.settings.theme_name);
 
-    app.set_status_text(
-        format!(
-            "Rust + Slint ready | {} active | {} history",
-            state.data.active.len(),
-            state.data.history.len()
-        )
-        .into(),
-    );
+    app.set_status_text("".into());
     app.set_bg(parse_hex_color(palette.bg));
     app.set_panel(parse_hex_color(palette.panel));
     app.set_panel_alt(parse_hex_color(palette.panel_alt));
