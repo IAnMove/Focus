@@ -125,6 +125,56 @@ component HeaderIconButton inherits Rectangle {
     }
 }
 
+component DragHandle inherits Rectangle {
+    in property <int> task-id;
+    in property <color> panel;
+    in property <color> border;
+    in property <color> text-muted;
+    in property <bool> accessibility-mode: false;
+    callback drag-step(task-id: int, delta: int);
+
+    width: accessibility-mode ? 34px : 28px;
+    height: accessibility-mode ? 40px : 34px;
+    border-radius: 10px;
+    border-width: 1px;
+    border-color: border;
+    background: panel;
+    property <length> drag-origin-y: 0px;
+
+    Text {
+        text: "⋮⋮";
+        color: text-muted;
+        font-size: accessibility-mode ? 16px : 14px;
+        horizontal-alignment: center;
+        vertical-alignment: center;
+    }
+
+    drag_touch := TouchArea {
+        mouse-cursor: move;
+
+        changed pressed => {
+            if (self.pressed) {
+                root.drag-origin-y = self.mouse-y;
+            }
+        }
+
+        moved => {
+            if (!self.pressed) {
+                return;
+            }
+
+            let delta-y = self.mouse-y - root.drag-origin-y;
+            if (delta-y > 18px) {
+                root.drag-step(root.task-id, 1);
+                root.drag-origin-y = self.mouse-y;
+            } else if (delta-y < -18px) {
+                root.drag-step(root.task-id, -1);
+                root.drag-origin-y = self.mouse-y;
+            }
+        }
+    }
+}
+
 component TaskCard inherits Rectangle {
     in property <TaskView> task;
     in property <color> panel;
@@ -140,6 +190,7 @@ component TaskCard inherits Rectangle {
     callback move-up(task-id: int);
     callback move-down(task-id: int);
     callback cycle-tab(task-id: int);
+    callback drag-step(task-id: int, delta: int);
     in property <bool> compact-actions: false;
     in property <float> font-scale: 1.0;
     in property <bool> accessibility-mode: false;
@@ -251,6 +302,15 @@ component TaskCard inherits Rectangle {
                     accessibility-mode: root.accessibility-mode;
                     clicked => { root.cycle-tab(task.id); }
                 }
+
+                DragHandle {
+                    task-id: task.id;
+                    panel: panel;
+                    border: border;
+                    text-muted: text-muted;
+                    accessibility-mode: root.accessibility-mode;
+                    drag-step(task-id, delta) => { root.drag-step(task-id, delta); }
+                }
             }
         }
 
@@ -353,6 +413,15 @@ component TaskCard inherits Rectangle {
                 text-main: text-main;
                 accessibility-mode: root.accessibility-mode;
                 clicked => { root.cycle-tab(task.id); }
+            }
+
+            DragHandle {
+                task-id: task.id;
+                panel: panel;
+                border: border;
+                text-muted: text-muted;
+                accessibility-mode: root.accessibility-mode;
+                drag-step(task-id, delta) => { root.drag-step(task-id, delta); }
             }
         }
     }
@@ -545,6 +614,7 @@ export component AppWindow inherits Window {
     callback move-task-up(task-id: int);
     callback move-task-down(task-id: int);
     callback cycle-task-tab(task-id: int);
+    callback drag-task-step(task-id: int, delta: int);
     callback submit-tab();
     callback move-tab-up(name: string);
     callback move-tab-down(name: string);
@@ -915,6 +985,7 @@ export component AppWindow inherits Window {
                             move-up(task-id) => { root.move-task-up(task-id); }
                             move-down(task-id) => { root.move-task-down(task-id); }
                             cycle-tab(task-id) => { root.cycle-task-tab(task-id); }
+                            drag-step(task-id, delta) => { root.drag-task-step(task-id, delta); }
                         }
                     }
                 }

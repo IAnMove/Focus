@@ -900,6 +900,17 @@ fn bind_callbacks(app: &AppWindow, state: Rc<RefCell<AppState>>, undo_timer: Rc<
         }
     });
 
+    app.on_drag_task_step({
+        let app_weak = app_weak.clone();
+        let state = state.clone();
+        move |task_id, delta| {
+            let mut state = state.borrow_mut();
+            if state.move_task(task_id as u64, delta as isize) {
+                refresh_if_possible(&app_weak, &state);
+            }
+        }
+    });
+
     app.on_submit_tab({
         let app_weak = app_weak.clone();
         let state = state.clone();
