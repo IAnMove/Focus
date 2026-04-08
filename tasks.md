@@ -78,7 +78,7 @@ Portar la aplicacion actual de checklist en Python a Rust usando Slint, mantenie
 - [x] 18. Limpiar la cabecera principal quitando el texto de estado tecnico y moviendo la informacion de version solo a `About`.
 - [x] 19. Recuperar overflow de tabs con flechas laterales y ventana deslizante de tabs visibles.
 - [x] 20. Hacer responsive la tira de tabs para que muestre al menos `All`, `General` y el espacio de navegacion lateral cuando haya overflow.
-- [ ] 21. Recuperar sonidos equivalentes al script original para add, click y complete, con comportamiento multiplataforma razonable.
+- [x] 21. Recuperar sonidos equivalentes al script original para add, click y complete, con comportamiento multiplataforma razonable.
 - [ ] 22. Portar selector y edicion completa de `due_date`, tiempo restante y progreso con el nivel de detalle del script original.
 - [ ] 23. Recuperar drag and drop real para reordenar tareas, manteniendo persistencia correcta.
 - [ ] 24. Recuperar inicio con el sistema en Windows y Linux.
@@ -102,4 +102,4 @@ Portar la aplicacion actual de checklist en Python a Rust usando Slint, mantenie
 - Hacer un commit por cada tarea completada.
 
 ## Siguiente paso
-Tarea 21: recuperar sonidos equivalentes al script original para add, click y complete, con comportamiento multiplataforma razonable.
+Tarea 22: portar selector y edicion completa de `due_date`, tiempo restante y progreso con el nivel de detalle del script original.
