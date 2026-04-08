@@ -318,6 +318,45 @@ component HeaderIconButton inherits Rectangle {
     }
 }
 
+component AppButton inherits Rectangle {
+    in property <string> text;
+    in property <bool> enabled: true;
+    in property <bool> primary: false;
+    in property <bool> danger: false;
+    in property <bool> compact: false;
+    in property <color> panel;
+    in property <color> panel-alt;
+    in property <color> accent;
+    in property <color> border;
+    in property <color> text-main;
+    in property <color> text-muted;
+    in property <float> font-scale: 1.0;
+    in property <bool> accessibility-mode: false;
+    callback clicked();
+
+    min-width: compact ? (accessibility-mode ? 56px : 44px) : (accessibility-mode ? 110px : 92px);
+    height: accessibility-mode ? 40px : 34px;
+    border-radius: 12px;
+    border-width: 1px;
+    border-color: danger ? #9a5b5b : (primary ? accent : border);
+    background: !enabled ? panel : (danger ? #382829 : (primary ? accent : panel-alt));
+    opacity: enabled ? 1 : 0.6;
+
+    Text {
+        text: root.text;
+        color: danger ? #f1d8d8 : (primary ? #15110b : (enabled ? text-main : text-muted));
+        font-size: 12px * font-scale * (accessibility-mode ? 1.08 : 1.0);
+        font-weight: 600;
+        horizontal-alignment: center;
+        vertical-alignment: center;
+    }
+
+    TouchArea {
+        enabled: root.enabled;
+        clicked => { root.clicked(); }
+    }
+}
+
 component DragHandle inherits Rectangle {
     in property <int> task-id;
     in property <color> panel;
@@ -718,8 +757,16 @@ component TaskCard inherits Rectangle {
             font-size: 12px * font-scale * (accessibility-mode ? 1.08 : 1.0);
         }
 
-        if (task.has_link) : Button {
+        if (task.has_link) : AppButton {
             text: task.link_label;
+            panel: panel;
+            panel-alt: panel-alt;
+            accent: accent;
+            border: border;
+            text-main: text-main;
+            text-muted: text-muted;
+            font-scale: root.font-scale;
+            accessibility-mode: root.accessibility-mode;
             clicked => { root.open-link(task.link_url); }
         }
 
@@ -850,8 +897,16 @@ component HistoryCard inherits Rectangle {
                 }
             }
 
-            Button {
+            AppButton {
                 text: "Restore";
+                panel: panel;
+                panel-alt: panel;
+                accent: accent;
+                border: border;
+                text-main: text-main;
+                text-muted: text-muted;
+                font-scale: root.font-scale;
+                accessibility-mode: root.accessibility-mode;
                 clicked => { root.restore(entry.id); }
             }
         }
@@ -863,8 +918,16 @@ component HistoryCard inherits Rectangle {
             font-size: 12px * font-scale * (accessibility-mode ? 1.08 : 1.0);
         }
 
-        if (entry.has_link) : Button {
+        if (entry.has_link) : AppButton {
             text: entry.link_label;
+            panel: panel;
+            panel-alt: panel;
+            accent: accent;
+            border: border;
+            text-main: text-main;
+            text-muted: text-muted;
+            font-scale: root.font-scale;
+            accessibility-mode: root.accessibility-mode;
             clicked => { root.open-link(entry.link_url); }
         }
     }
@@ -874,6 +937,7 @@ component TabManagerCard inherits Rectangle {
     in property <TabManagerView> tab;
     in property <color> panel;
     in property <color> border;
+    in property <color> accent;
     in property <color> text-main;
     in property <color> text-muted;
     in property <float> font-scale: 1.0;
@@ -913,18 +977,43 @@ component TabManagerCard inherits Rectangle {
                 }
             }
 
-            Button {
+            AppButton {
                 text: "Up";
+                panel: panel;
+                panel-alt: panel;
+                accent: accent;
+                border: border;
+                text-main: text-main;
+                text-muted: text-muted;
+                font-scale: root.font-scale;
+                accessibility-mode: root.accessibility-mode;
                 clicked => { root.move-up(tab.name); }
             }
 
-            Button {
+            AppButton {
                 text: "Down";
+                panel: panel;
+                panel-alt: panel;
+                accent: accent;
+                border: border;
+                text-main: text-main;
+                text-muted: text-muted;
+                font-scale: root.font-scale;
+                accessibility-mode: root.accessibility-mode;
                 clicked => { root.move-down(tab.name); }
             }
 
-            if (tab.can_delete) : Button {
+            if (tab.can_delete) : AppButton {
                 text: "Delete";
+                danger: true;
+                panel: panel;
+                panel-alt: panel;
+                accent: accent;
+                border: border;
+                text-main: text-main;
+                text-muted: text-muted;
+                font-scale: root.font-scale;
+                accessibility-mode: root.accessibility-mode;
                 clicked => { root.remove(tab.name); }
             }
         }
@@ -1190,13 +1279,30 @@ export component AppWindow inherits Window {
                 HorizontalLayout {
                     spacing: 8px;
 
-                    Button {
+                    AppButton {
                         text: root.draft-has-due ? "Due enabled" : "Enable due";
+                        panel: root.panel;
+                        panel-alt: root.panel-alt;
+                        accent: root.accent;
+                        border: root.border;
+                        text-main: root.text-main;
+                        text-muted: root.text-muted;
+                        font-scale: root.font-scale;
+                        accessibility-mode: root.accessibility-mode;
                         clicked => { root.draft-has-due = !root.draft-has-due; }
                     }
 
-                    if (root.draft-has-due) : Button {
+                    if (root.draft-has-due) : AppButton {
                         text: "Clear due";
+                        danger: true;
+                        panel: root.panel;
+                        panel-alt: root.panel-alt;
+                        accent: root.accent;
+                        border: root.border;
+                        text-main: root.text-main;
+                        text-muted: root.text-muted;
+                        font-scale: root.font-scale;
+                        accessibility-mode: root.accessibility-mode;
                         clicked => {
                             root.draft-due-date = "";
                             root.draft-has-due = false;
@@ -1226,14 +1332,31 @@ export component AppWindow inherits Window {
                 HorizontalLayout {
                     spacing: 8px;
 
-                    Button {
+                    AppButton {
                         text: root.editing-mode ? "Save" : "Create";
+                        primary: true;
+                        panel: root.panel;
+                        panel-alt: root.panel-alt;
+                        accent: root.accent-warm;
+                        border: root.border;
+                        text-main: root.text-main;
+                        text-muted: root.text-muted;
+                        font-scale: root.font-scale;
+                        accessibility-mode: root.accessibility-mode;
                         clicked => { root.submit-draft(); }
                     }
 
-                    Button {
+                    AppButton {
                         text: "Cancel";
                         enabled: root.editing-mode || root.draft-title != "" || root.draft-extra != "" || root.draft-has-due || root.draft-due-date != "";
+                        panel: root.panel;
+                        panel-alt: root.panel-alt;
+                        accent: root.accent;
+                        border: root.border;
+                        text-main: root.text-main;
+                        text-muted: root.text-muted;
+                        font-scale: root.font-scale;
+                        accessibility-mode: root.accessibility-mode;
                         clicked => { root.cancel-draft(); }
                     }
                 }
@@ -1517,8 +1640,17 @@ export component AppWindow inherits Window {
                                     placeholder-text: "New tab name";
                                 }
 
-                                Button {
+                                AppButton {
                                     text: "Create tab";
+                                    primary: true;
+                                    panel: root.panel;
+                                    panel-alt: root.panel-alt;
+                                    accent: root.accent;
+                                    border: root.border;
+                                    text-main: root.text-main;
+                                    text-muted: root.text-muted;
+                                    font-scale: root.font-scale;
+                                    accessibility-mode: root.accessibility-mode;
                                     clicked => { root.submit-tab(); }
                                 }
                             }
@@ -1549,8 +1681,16 @@ export component AppWindow inherits Window {
                                     font-size: root.font-body;
                                 }
 
-                                Button {
+                                AppButton {
                                     text: root.startup-enabled ? "Launch on login enabled" : "Launch on login disabled";
+                                    panel: root.panel;
+                                    panel-alt: root.panel-alt;
+                                    accent: root.accent;
+                                    border: root.border;
+                                    text-main: root.text-main;
+                                    text-muted: root.text-muted;
+                                    font-scale: root.font-scale;
+                                    accessibility-mode: root.accessibility-mode;
                                     clicked => { root.toggle-startup(); }
                                 }
 
@@ -1584,8 +1724,17 @@ export component AppWindow inherits Window {
                                 HorizontalLayout {
                                     spacing: 8px;
 
-                                    Button {
+                                    AppButton {
                                         text: "A-";
+                                        compact: true;
+                                        panel: root.panel;
+                                        panel-alt: root.panel-alt;
+                                        accent: root.accent;
+                                        border: root.border;
+                                        text-main: root.text-main;
+                                        text-muted: root.text-muted;
+                                        font-scale: root.font-scale;
+                                        accessibility-mode: root.accessibility-mode;
                                         clicked => { root.decrease-font-scale(); }
                                     }
 
@@ -1606,8 +1755,17 @@ export component AppWindow inherits Window {
                                         }
                                     }
 
-                                    Button {
+                                    AppButton {
                                         text: "A+";
+                                        compact: true;
+                                        panel: root.panel;
+                                        panel-alt: root.panel-alt;
+                                        accent: root.accent;
+                                        border: root.border;
+                                        text-main: root.text-main;
+                                        text-muted: root.text-muted;
+                                        font-scale: root.font-scale;
+                                        accessibility-mode: root.accessibility-mode;
                                         clicked => { root.increase-font-scale(); }
                                     }
                                 }
@@ -1615,13 +1773,29 @@ export component AppWindow inherits Window {
                                 HorizontalLayout {
                                     spacing: 8px;
 
-                                    Button {
+                                    AppButton {
                                         text: root.accessibility-mode ? "Accessibility on" : "Accessibility off";
+                                        panel: root.panel;
+                                        panel-alt: root.panel-alt;
+                                        accent: root.accent;
+                                        border: root.border;
+                                        text-main: root.text-main;
+                                        text-muted: root.text-muted;
+                                        font-scale: root.font-scale;
+                                        accessibility-mode: root.accessibility-mode;
                                         clicked => { root.toggle-accessibility-mode(); }
                                     }
 
-                                    Button {
+                                    AppButton {
                                         text: root.show-item-meta ? "Metadata visible" : "Titles only";
+                                        panel: root.panel;
+                                        panel-alt: root.panel-alt;
+                                        accent: root.accent;
+                                        border: root.border;
+                                        text-main: root.text-main;
+                                        text-muted: root.text-muted;
+                                        font-scale: root.font-scale;
+                                        accessibility-mode: root.accessibility-mode;
                                         clicked => { root.toggle-item-meta(); }
                                     }
                                 }
@@ -1649,18 +1823,42 @@ export component AppWindow inherits Window {
                                 HorizontalLayout {
                                     spacing: 8px;
 
-                                    Button {
+                                    AppButton {
                                         text: "Warm";
+                                        panel: root.panel;
+                                        panel-alt: root.panel-alt;
+                                        accent: root.accent-warm;
+                                        border: root.border;
+                                        text-main: root.text-main;
+                                        text-muted: root.text-muted;
+                                        font-scale: root.font-scale;
+                                        accessibility-mode: root.accessibility-mode;
                                         clicked => { root.apply-theme-preset("warm"); }
                                     }
 
-                                    Button {
+                                    AppButton {
                                         text: "Forest";
+                                        panel: root.panel;
+                                        panel-alt: root.panel-alt;
+                                        accent: root.accent-warm;
+                                        border: root.border;
+                                        text-main: root.text-main;
+                                        text-muted: root.text-muted;
+                                        font-scale: root.font-scale;
+                                        accessibility-mode: root.accessibility-mode;
                                         clicked => { root.apply-theme-preset("forest"); }
                                     }
 
-                                    Button {
+                                    AppButton {
                                         text: "Ocean";
+                                        panel: root.panel;
+                                        panel-alt: root.panel-alt;
+                                        accent: root.accent-warm;
+                                        border: root.border;
+                                        text-main: root.text-main;
+                                        text-muted: root.text-muted;
+                                        font-scale: root.font-scale;
+                                        accessibility-mode: root.accessibility-mode;
                                         clicked => { root.apply-theme-preset("ocean"); }
                                     }
                                 }
@@ -1668,13 +1866,29 @@ export component AppWindow inherits Window {
                                 HorizontalLayout {
                                     spacing: 8px;
 
-                                    Button {
+                                    AppButton {
                                         text: "Rose";
+                                        panel: root.panel;
+                                        panel-alt: root.panel-alt;
+                                        accent: root.accent-warm;
+                                        border: root.border;
+                                        text-main: root.text-main;
+                                        text-muted: root.text-muted;
+                                        font-scale: root.font-scale;
+                                        accessibility-mode: root.accessibility-mode;
                                         clicked => { root.apply-theme-preset("rose"); }
                                     }
 
-                                    Button {
+                                    AppButton {
                                         text: "Dark";
+                                        panel: root.panel;
+                                        panel-alt: root.panel-alt;
+                                        accent: root.accent-warm;
+                                        border: root.border;
+                                        text-main: root.text-main;
+                                        text-muted: root.text-muted;
+                                        font-scale: root.font-scale;
+                                        accessibility-mode: root.accessibility-mode;
                                         clicked => { root.apply-theme-preset("dark"); }
                                     }
                                 }
@@ -1719,18 +1933,43 @@ export component AppWindow inherits Window {
                                 HorizontalLayout {
                                     spacing: 8px;
 
-                                    Button {
+                                    AppButton {
                                         text: root.sync-enabled ? "Sync enabled" : "Sync disabled";
+                                        panel: root.panel;
+                                        panel-alt: root.panel-alt;
+                                        accent: root.accent;
+                                        border: root.border;
+                                        text-main: root.text-main;
+                                        text-muted: root.text-muted;
+                                        font-scale: root.font-scale;
+                                        accessibility-mode: root.accessibility-mode;
                                         clicked => { root.sync-enabled = !root.sync-enabled; }
                                     }
 
-                                    Button {
+                                    AppButton {
                                         text: "Save sync config";
+                                        panel: root.panel;
+                                        panel-alt: root.panel-alt;
+                                        accent: root.accent;
+                                        border: root.border;
+                                        text-main: root.text-main;
+                                        text-muted: root.text-muted;
+                                        font-scale: root.font-scale;
+                                        accessibility-mode: root.accessibility-mode;
                                         clicked => { root.save-sync-config(); }
                                     }
 
-                                    Button {
+                                    AppButton {
                                         text: "Sync now";
+                                        primary: true;
+                                        panel: root.panel;
+                                        panel-alt: root.panel-alt;
+                                        accent: root.accent;
+                                        border: root.border;
+                                        text-main: root.text-main;
+                                        text-muted: root.text-muted;
+                                        font-scale: root.font-scale;
+                                        accessibility-mode: root.accessibility-mode;
                                         clicked => { root.sync-now(); }
                                     }
                                 }
@@ -1770,13 +2009,30 @@ export component AppWindow inherits Window {
                                 HorizontalLayout {
                                     spacing: 8px;
 
-                                    Button {
+                                    AppButton {
                                         text: "Import";
+                                        panel: root.panel;
+                                        panel-alt: root.panel-alt;
+                                        accent: root.accent;
+                                        border: root.border;
+                                        text-main: root.text-main;
+                                        text-muted: root.text-muted;
+                                        font-scale: root.font-scale;
+                                        accessibility-mode: root.accessibility-mode;
                                         clicked => { root.import-data(); }
                                     }
 
-                                    Button {
+                                    AppButton {
                                         text: "Export";
+                                        primary: true;
+                                        panel: root.panel;
+                                        panel-alt: root.panel-alt;
+                                        accent: root.accent-warm;
+                                        border: root.border;
+                                        text-main: root.text-main;
+                                        text-muted: root.text-muted;
+                                        font-scale: root.font-scale;
+                                        accessibility-mode: root.accessibility-mode;
                                         clicked => { root.export-data(); }
                                     }
                                 }
@@ -1796,6 +2052,7 @@ export component AppWindow inherits Window {
                             accessibility-mode: root.accessibility-mode;
                             panel: Math.mod(index, 2) == 0 ? root.panel-soft : root.panel;
                             border: root.border;
+                            accent: root.accent;
                             text-main: root.text-main;
                             text-muted: root.text-muted;
                             move-up(name) => { root.move-tab-up(name); }
@@ -1842,8 +2099,17 @@ export component AppWindow inherits Window {
                                     font-size: root.font-body;
                                 }
 
-                                Button {
+                                AppButton {
                                     text: "Open project";
+                                    primary: true;
+                                    panel: root.panel;
+                                    panel-alt: root.panel-alt;
+                                    accent: root.accent;
+                                    border: root.border;
+                                    text-main: root.text-main;
+                                    text-muted: root.text-muted;
+                                    font-scale: root.font-scale;
+                                    accessibility-mode: root.accessibility-mode;
                                     clicked => { root.open-project-link(); }
                                 }
                             }
@@ -1864,8 +2130,16 @@ export component AppWindow inherits Window {
                 padding: 12px;
                 spacing: 8px;
 
-                if (root.can-undo) : Button {
+                if (root.can-undo) : AppButton {
                     text: "Undo";
+                    panel: root.panel;
+                    panel-alt: root.panel-alt;
+                    accent: root.accent-warm;
+                    border: root.border;
+                    text-main: root.text-main;
+                    text-muted: root.text-muted;
+                    font-scale: root.font-scale;
+                    accessibility-mode: root.accessibility-mode;
                     clicked => { root.undo-complete(); }
                 }
 
