@@ -4,6 +4,7 @@ mod storage;
 
 use std::cell::RefCell;
 use std::path::PathBuf;
+use std::process::Command;
 use std::rc::Rc;
 use std::time::Duration;
 
@@ -12,6 +13,12 @@ use slint::winit_030::{WinitWindowAccessor, winit};
 use slint::{Color, ModelRc, Timer, TimerMode, VecModel, Weak};
 
 slint::include_modules!();
+
+const PROJECT_REPO_URL: &str = "https://github.com/IAnMove/Focus";
+const BUILD_COMMIT: &str = match option_env!("GIT_COMMIT_HASH") {
+    Some(value) => value,
+    None => "dev",
+};
 
 #[derive(Debug)]
 struct AppState {
@@ -1004,6 +1011,10 @@ fn bind_callbacks(app: &AppWindow, state: Rc<RefCell<AppState>>, undo_timer: Rc<
             }
         }
     });
+
+    app.on_open_project_link(move || {
+        let _ = open_project_link(PROJECT_REPO_URL);
+    });
 }
 
 fn refresh_if_possible(app_weak: &Weak<AppWindow>, state: &AppState) {
@@ -1089,6 +1100,9 @@ fn refresh_ui(app: &AppWindow, state: &AppState) {
     app.set_sync_path(state.sync_path.clone().into());
     app.set_sync_device_id(state.sync_device_id.clone().into());
     app.set_sync_message(state.sync_message.clone().into());
+    app.set_about_version(env!("CARGO_PKG_VERSION").into());
+    app.set_about_commit(BUILD_COMMIT.into());
+    app.set_about_repo_url(PROJECT_REPO_URL.into());
     app.set_editing_mode(state.editing_task_id.is_some());
     app.set_draft_visible(state.draft_visible);
     app.set_can_undo(state.undo_item.is_some());
@@ -1154,6 +1168,29 @@ fn theme_palette(name: &str) -> ThemePalette {
             accent_warm: "#c07828",
         },
     }
+}
+
+fn open_project_link(url: &str) -> std::io::Result<()> {
+    #[cfg(target_os = "windows")]
+    {
+        Command::new("cmd").args(["/C", "start", "", url]).spawn()?;
+        return Ok(());
+    }
+
+    #[cfg(target_os = "macos")]
+    {
+        Command::new("open").arg(url).spawn()?;
+        return Ok(());
+    }
+
+    #[cfg(all(unix, not(target_os = "macos")))]
+    {
+        Command::new("xdg-open").arg(url).spawn()?;
+        return Ok(());
+    }
+
+    #[allow(unreachable_code)]
+    Ok(())
 }
 
 fn parse_hex_color(value: &str) -> Color {

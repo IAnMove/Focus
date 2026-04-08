@@ -510,6 +510,9 @@ export component AppWindow inherits Window {
     in-out property <string> sync-path: "";
     in-out property <string> sync-device-id: "";
     in-out property <string> sync-message: "";
+    in-out property <string> about-version: "";
+    in-out property <string> about-commit: "";
+    in-out property <string> about-repo-url: "";
     in-out property <float> font-scale: 1.0;
     in-out property <string> font-scale-label: "100%";
     in-out property <bool> accessibility-mode: false;
@@ -550,6 +553,7 @@ export component AppWindow inherits Window {
     callback increase-font-scale();
     callback toggle-accessibility-mode();
     callback toggle-item-meta();
+    callback open-project-link();
     callback save-sync-config();
     callback sync-now();
     callback shift-tabs-left();
@@ -1261,6 +1265,52 @@ export component AppWindow inherits Window {
                             move-up(name) => { root.move-tab-up(name); }
                             move-down(name) => { root.move-tab-down(name); }
                             remove(name) => { root.delete-tab(name); }
+                        }
+
+                        Rectangle {
+                            border-radius: 18px;
+                            border-width: 1px;
+                            border-color: root.border;
+                            background: root.panel-soft;
+                            min-height: 148px;
+
+                            VerticalLayout {
+                                padding: 14px;
+                                spacing: 8px;
+
+                                Text {
+                                    text: "About";
+                                    color: root.text-main;
+                                    font-size: root.font-section;
+                                    font-weight: 700;
+                                }
+
+                                Text {
+                                    text: "Minimal desktop checklist";
+                                    color: root.text-muted;
+                                    wrap: word-wrap;
+                                    font-size: root.font-body;
+                                }
+
+                                Text {
+                                    text: root.about-repo-url;
+                                    color: root.accent;
+                                    wrap: word-wrap;
+                                    font-size: root.font-body;
+                                }
+
+                                Text {
+                                    text: root.app-title + " " + root.about-version + "  ·  " + root.about-commit;
+                                    color: root.text-main;
+                                    wrap: word-wrap;
+                                    font-size: root.font-body;
+                                }
+
+                                Button {
+                                    text: "Open project";
+                                    clicked => { root.open-project-link(); }
+                                }
+                            }
                         }
                     }
                 }
