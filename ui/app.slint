@@ -553,7 +553,14 @@ export component AppWindow inherits Window {
             border-color: root.border;
             background: root.panel-alt;
             height: 102px;
-            property <bool> show-header-actions: title_hover.has-hover || actions_hover.has-hover;
+            property <bool> show-header-actions: header_hover.has-hover;
+
+            header_hover := TouchArea {
+                x: 0;
+                y: 0;
+                width: parent.width;
+                height: parent.height;
+            }
 
             HorizontalLayout {
                 padding: 16px;
@@ -563,13 +570,6 @@ export component AppWindow inherits Window {
                     horizontal-stretch: 1;
                     height: parent.height;
                     background: transparent;
-
-                    title_hover := TouchArea {
-                        x: 0;
-                        y: 0;
-                        width: parent.width;
-                        height: parent.height;
-                    }
 
                     VerticalLayout {
                         width: parent.width;
@@ -597,13 +597,6 @@ export component AppWindow inherits Window {
                     height: parent.height;
                     background: transparent;
                     opacity: header_shell.show-header-actions ? 1 : 0;
-
-                    actions_hover := TouchArea {
-                        x: 0;
-                        y: 0;
-                        width: parent.width;
-                        height: parent.height;
-                    }
 
                     HorizontalLayout {
                         width: parent.width;
