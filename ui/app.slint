@@ -503,6 +503,9 @@ export component AppWindow inherits Window {
     in-out property <int> done-year-count: 0;
     in-out property <string> draft-title: "";
     in-out property <string> draft-extra: "";
+    in-out property <string> draft-due-date: "";
+    in-out property <bool> draft-has-due: false;
+    in-out property <string> draft-message: "";
     in-out property <string> draft-tab-name: "";
     in-out property <string> transfer-path: "";
     in-out property <string> tools-message: "";
@@ -735,13 +738,49 @@ export component AppWindow inherits Window {
                     spacing: 8px;
 
                     Button {
+                        text: root.draft-has-due ? "Due enabled" : "Enable due";
+                        clicked => { root.draft-has-due = !root.draft-has-due; }
+                    }
+
+                    if (root.draft-has-due) : Button {
+                        text: "Clear due";
+                        clicked => {
+                            root.draft-due-date = "";
+                            root.draft-has-due = false;
+                        }
+                    }
+                }
+
+                if (root.draft-has-due) : LineEdit {
+                    text <=> root.draft-due-date;
+                    placeholder-text: "YYYY-MM-DD or YYYY-MM-DD HH:MM";
+                }
+
+                if (root.draft-has-due) : Text {
+                    text: "Accepted formats: 2025-03-14 or 2025-03-14 18:30";
+                    color: root.text-muted;
+                    wrap: word-wrap;
+                    font-size: root.font-caption;
+                }
+
+                if (root.draft-message != "") : Text {
+                    text: root.draft-message;
+                    color: root.accent-warm;
+                    wrap: word-wrap;
+                    font-size: root.font-caption;
+                }
+
+                HorizontalLayout {
+                    spacing: 8px;
+
+                    Button {
                         text: root.editing-mode ? "Save" : "Create";
                         clicked => { root.submit-draft(); }
                     }
 
                     Button {
                         text: "Cancel";
-                        enabled: root.editing-mode || root.draft-title != "" || root.draft-extra != "";
+                        enabled: root.editing-mode || root.draft-title != "" || root.draft-extra != "" || root.draft-has-due || root.draft-due-date != "";
                         clicked => { root.cancel-draft(); }
                     }
                 }

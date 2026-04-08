@@ -31,6 +31,9 @@ struct AppState {
     draft_visible: bool,
     draft_title: String,
     draft_extra: String,
+    draft_due_date: String,
+    draft_has_due: bool,
+    draft_message: String,
     draft_tab_name: String,
     transfer_path: String,
     sync_enabled: bool,
@@ -72,6 +75,9 @@ impl AppState {
             draft_visible: false,
             draft_title: String::new(),
             draft_extra: String::new(),
+            draft_due_date: String::new(),
+            draft_has_due: false,
+            draft_message: String::new(),
             draft_tab_name: String::new(),
             transfer_path: storage::default_export_path().display().to_string(),
             sync_enabled,
@@ -94,6 +100,9 @@ impl AppState {
     fn clear_draft(&mut self) {
         self.draft_title.clear();
         self.draft_extra.clear();
+        self.draft_due_date.clear();
+        self.draft_has_due = false;
+        self.draft_message.clear();
         self.editing_task_id = None;
         self.draft_visible = false;
     }
@@ -113,18 +122,35 @@ impl AppState {
     fn submit_draft(&mut self) -> bool {
         let text = self.draft_title.trim();
         if text.is_empty() {
+            self.draft_message = "Task title cannot be empty".to_string();
             return false;
         }
+
+        let due_date = match normalize_due_input(
+            if self.draft_has_due {
+                self.draft_due_date.trim()
+            } else {
+                ""
+            },
+        ) {
+            Ok(value) => value,
+            Err(message) => {
+                self.draft_message = message;
+                return false;
+            }
+        };
 
         if let Some(task_id) = self.editing_task_id {
             if let Some(task) = self.data.active.iter_mut().find(|task| task.id == task_id) {
                 task.text = text.to_string();
                 task.extra_info = self.draft_extra.trim().to_string();
+                task.due_date = due_date;
             }
         } else {
             let mut item = model::TaskItem::new(self.data.next_id(), text);
             item.created_at = storage::now_stamp();
             item.extra_info = self.draft_extra.trim().to_string();
+            item.due_date = due_date;
             item.tab = if self.active_tab == "All" {
                 model::GENERAL_TAB_NAME.to_string()
             } else {
@@ -143,6 +169,9 @@ impl AppState {
             self.editing_task_id = Some(task_id);
             self.draft_title = task.text.clone();
             self.draft_extra = task.extra_info.clone();
+            self.draft_due_date = task.due_date.clone();
+            self.draft_has_due = !task.due_date.trim().is_empty();
+            self.draft_message.clear();
             self.draft_visible = true;
             self.history_visible = false;
             self.tools_visible = false;
@@ -649,9 +678,17 @@ fn bind_callbacks(app: &AppWindow, state: Rc<RefCell<AppState>>, undo_timer: Rc<
         let app_weak = app_weak.clone();
         let state = state.clone();
         move || {
-            let mut state = state.borrow_mut();
-            if state.submit_draft() {
-                refresh_if_possible(&app_weak, &state);
+            if let Some(app) = app_weak.upgrade() {
+                let mut state = state.borrow_mut();
+                state.draft_title = app.get_draft_title().to_string();
+                state.draft_extra = app.get_draft_extra().to_string();
+                state.draft_due_date = app.get_draft_due_date().to_string();
+                state.draft_has_due = app.get_draft_has_due();
+                if state.submit_draft() {
+                    refresh_ui(&app, &state);
+                } else {
+                    refresh_ui(&app, &state);
+                }
             }
         }
     });
@@ -867,9 +904,12 @@ fn bind_callbacks(app: &AppWindow, state: Rc<RefCell<AppState>>, undo_timer: Rc<
         let app_weak = app_weak.clone();
         let state = state.clone();
         move || {
-            let mut state = state.borrow_mut();
-            if state.submit_tab() {
-                refresh_if_possible(&app_weak, &state);
+            if let Some(app) = app_weak.upgrade() {
+                let mut state = state.borrow_mut();
+                state.draft_tab_name = app.get_draft_tab_name().to_string();
+                if state.submit_tab() {
+                    refresh_ui(&app, &state);
+                }
             }
         }
     });
@@ -1086,6 +1126,9 @@ fn refresh_ui(app: &AppWindow, state: &AppState) {
     app.set_current_meta(current.1.into());
     app.set_draft_title(state.draft_title.clone().into());
     app.set_draft_extra(state.draft_extra.clone().into());
+    app.set_draft_due_date(state.draft_due_date.clone().into());
+    app.set_draft_has_due(state.draft_has_due);
+    app.set_draft_message(state.draft_message.clone().into());
     app.set_draft_tab_name(state.draft_tab_name.clone().into());
     app.set_transfer_path(state.transfer_path.clone().into());
     app.set_tools_message(state.tools_message.clone().into());
@@ -1319,23 +1362,39 @@ fn task_meta(task: &model::TaskItem) -> String {
     let mut parts = Vec::new();
 
     if !task.tab.trim().is_empty() {
-        parts.push(task.tab.clone());
+        parts.push(format!("tab {}", task.tab));
     }
     if !task.created_at.trim().is_empty() {
-        parts.push(format!("Created {}", task.created_at));
+        parts.push(format!("added {}", task.created_at));
+    }
+    if !task.due_date.trim().is_empty() {
+        let mut due = format!("due {}", format_dt(&task.due_date));
+        let remaining = format_remaining_time(&task.due_date);
+        if !remaining.is_empty() {
+            due.push_str(&format!(" ({remaining})"));
+        }
+        parts.push(due);
     }
     if task.current {
-        parts.push("Pinned as current".to_string());
+        parts.push("current".to_string());
+    }
+    if !task.extra_info.trim().is_empty() {
+        parts.push("extra info".to_string());
     }
 
-    parts.join(" | ")
+    parts.join("  ·  ")
 }
 
 fn due_label(task: &model::TaskItem) -> String {
     if task.due_date.trim().is_empty() {
         String::new()
     } else {
-        format!("Due {}", task.due_date)
+        let remaining = format_remaining_time(&task.due_date);
+        if remaining.is_empty() {
+            format!("Due {}", format_dt(&task.due_date))
+        } else {
+            format!("Due {}  ·  {}", format_dt(&task.due_date), remaining)
+        }
     }
 }
 
@@ -1343,16 +1402,19 @@ fn history_meta(task: &model::TaskItem) -> String {
     let mut parts = Vec::new();
 
     if !task.tab.trim().is_empty() {
-        parts.push(task.tab.clone());
+        parts.push(format!("tab {}", task.tab));
     }
     if !task.created_at.trim().is_empty() {
-        parts.push(format!("Created {}", task.created_at));
+        parts.push(format!("added {}", task.created_at));
     }
     if !task.completed_at.trim().is_empty() {
-        parts.push(format!("Done {}", task.completed_at));
+        parts.push(format!("done {}", task.completed_at));
+    }
+    if !task.due_date.trim().is_empty() {
+        parts.push(format!("due {}", format_dt(&task.due_date)));
     }
 
-    parts.join(" | ")
+    parts.join("  ·  ")
 }
 
 fn due_progress_ratio(task: &model::TaskItem) -> f32 {
@@ -1371,6 +1433,56 @@ fn due_progress_ratio(task: &model::TaskItem) -> f32 {
     } else {
         (elapsed / total).clamp(0.0, 1.0)
     }
+}
+
+fn format_dt(value: &str) -> String {
+    parse_dt(value)
+        .map(|dt| dt.format("%Y-%m-%d %H:%M").to_string())
+        .unwrap_or_else(|| value.trim().to_string())
+}
+
+fn format_remaining_time(value: &str) -> String {
+    let Some(due) = parse_dt(value) else {
+        return String::new();
+    };
+
+    let delta = due - Local::now().naive_local();
+    let total_minutes = delta.num_minutes();
+    let overdue = total_minutes < 0;
+    let total_minutes = total_minutes.unsigned_abs();
+    let days = total_minutes / 1440;
+    let rem = total_minutes % 1440;
+    let hours = rem / 60;
+    let minutes = rem % 60;
+
+    let mut parts = Vec::new();
+    if days > 0 {
+        parts.push(format!("{days}d"));
+    }
+    if hours > 0 {
+        parts.push(format!("{hours}h"));
+    }
+    if minutes > 0 || parts.is_empty() {
+        parts.push(format!("{minutes}m"));
+    }
+
+    let label = parts.join(" ");
+    if overdue {
+        format!("overdue {label}")
+    } else {
+        format!("{label} left")
+    }
+}
+
+fn normalize_due_input(value: &str) -> Result<String, String> {
+    let trimmed = value.trim();
+    if trimmed.is_empty() {
+        return Ok(String::new());
+    }
+
+    parse_dt(trimmed)
+        .map(|dt| dt.format("%Y-%m-%d %H:%M").to_string())
+        .ok_or_else(|| "Due date must use YYYY-MM-DD or YYYY-MM-DD HH:MM".to_string())
 }
 
 fn completion_counts(data: &model::AppData) -> (usize, usize, usize) {
