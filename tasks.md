@@ -73,7 +73,7 @@ Portar la aplicacion actual de checklist en Python a Rust usando Slint, mantenie
 - [x] 13. Rehacer las acciones por tarea con iconos compactos siempre visibles a la derecha y paso automatico a una fila inferior al reducir ancho.
 - [x] 14. Corregir la interaccion de la fila de tarea para que funcionen `done`, `current`, `edit` y `delete` en todos los modos de ancho.
 - [x] 15. Recuperar los presets visuales del script original: `warm`, `forest`, `ocean`, `rose` y `dark`.
-- [ ] 16. Recuperar ajustes visuales persistentes: escala de fuente, modo accesible y mostrar/ocultar metadata.
+- [x] 16. Recuperar ajustes visuales persistentes: escala de fuente, modo accesible y mostrar/ocultar metadata.
 - [ ] 17. Portar el panel `About` al final de `Tools`, con version, commit y enlace del proyecto.
 - [ ] 18. Limpiar la cabecera principal quitando el texto de estado tecnico y moviendo la informacion de version solo a `About`.
 - [x] 19. Recuperar overflow de tabs con flechas laterales y ventana deslizante de tabs visibles.
@@ -102,4 +102,4 @@ Portar la aplicacion actual de checklist en Python a Rust usando Slint, mantenie
 - Hacer un commit por cada tarea completada.
 
 ## Siguiente paso
-Tarea 16: recuperar ajustes visuales persistentes: escala de fuente, modo accesible y mostrar/ocultar metadata.
+Tarea 17: portar el panel `About` al final de `Tools`, con version, commit y enlace del proyecto.

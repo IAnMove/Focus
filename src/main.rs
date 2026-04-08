@@ -552,6 +552,43 @@ impl AppState {
         }
     }
 
+    fn adjust_font_scale(&mut self, delta: f32) -> bool {
+        let next = (self.data.settings.font_scale + delta).clamp(0.8, 1.8);
+        if (next - self.data.settings.font_scale).abs() < f32::EPSILON {
+            return false;
+        }
+
+        self.data.settings.font_scale = (next * 10.0).round() / 10.0;
+        self.save();
+        self.set_tools_message(format!(
+            "Font scale set to {}%",
+            (self.data.settings.font_scale * 100.0).round() as i32
+        ));
+        true
+    }
+
+    fn toggle_accessibility_mode(&mut self) -> bool {
+        self.data.settings.accessibility_mode = !self.data.settings.accessibility_mode;
+        self.save();
+        self.set_tools_message(if self.data.settings.accessibility_mode {
+            "Accessibility mode enabled"
+        } else {
+            "Accessibility mode disabled"
+        });
+        true
+    }
+
+    fn toggle_item_meta(&mut self) -> bool {
+        self.data.settings.show_item_meta = !self.data.settings.show_item_meta;
+        self.save();
+        self.set_tools_message(if self.data.settings.show_item_meta {
+            "Task metadata visible"
+        } else {
+            "Task metadata hidden"
+        });
+        true
+    }
+
 }
 
 fn main() -> Result<(), slint::PlatformError> {
@@ -894,6 +931,50 @@ fn bind_callbacks(app: &AppWindow, state: Rc<RefCell<AppState>>, undo_timer: Rc<
         }
     });
 
+    app.on_decrease_font_scale({
+        let app_weak = app_weak.clone();
+        let state = state.clone();
+        move || {
+            let mut state = state.borrow_mut();
+            if state.adjust_font_scale(-0.1) {
+                refresh_if_possible(&app_weak, &state);
+            }
+        }
+    });
+
+    app.on_increase_font_scale({
+        let app_weak = app_weak.clone();
+        let state = state.clone();
+        move || {
+            let mut state = state.borrow_mut();
+            if state.adjust_font_scale(0.1) {
+                refresh_if_possible(&app_weak, &state);
+            }
+        }
+    });
+
+    app.on_toggle_accessibility_mode({
+        let app_weak = app_weak.clone();
+        let state = state.clone();
+        move || {
+            let mut state = state.borrow_mut();
+            if state.toggle_accessibility_mode() {
+                refresh_if_possible(&app_weak, &state);
+            }
+        }
+    });
+
+    app.on_toggle_item_meta({
+        let app_weak = app_weak.clone();
+        let state = state.clone();
+        move || {
+            let mut state = state.borrow_mut();
+            if state.toggle_item_meta() {
+                refresh_if_possible(&app_weak, &state);
+            }
+        }
+    });
+
     app.on_save_sync_config({
         let app_weak = app_weak.clone();
         let state = state.clone();
@@ -974,6 +1055,12 @@ fn refresh_ui(app: &AppWindow, state: &AppState) {
     app.set_accent(parse_hex_color(palette.accent));
     app.set_border(parse_hex_color(palette.border));
     app.set_accent_warm(parse_hex_color(palette.accent_warm));
+    app.set_font_scale(state.data.settings.font_scale);
+    app.set_accessibility_mode(state.data.settings.accessibility_mode);
+    app.set_show_item_meta(state.data.settings.show_item_meta);
+    app.set_font_scale_label(
+        format!("{}%", (state.data.settings.font_scale * 100.0).round() as i32).into(),
+    );
     app.set_footer_text(format_footer(&state.data, &state.active_tab).into());
     app.set_active_tab_name(state.active_tab.clone().into());
     app.set_pending_count(visible_items(&state.data, &state.active_tab).len() as i32);
@@ -1107,18 +1194,24 @@ fn build_tab_views(
 }
 
 fn build_task_views(data: &model::AppData, active_tab: &str) -> Vec<TaskView> {
+    let show_meta = data.settings.show_item_meta;
     visible_items(data, active_tab)
         .into_iter()
         .map(|task| TaskView {
             id: task.id as i32,
             title: task.text.clone().into(),
-            meta: task_meta(task).into(),
-            due_label: due_label(task).into(),
-            extra: task.extra_info.clone().into(),
+            meta: if show_meta { task_meta(task) } else { String::new() }.into(),
+            due_label: if show_meta { due_label(task) } else { String::new() }.into(),
+            extra: if show_meta {
+                task.extra_info.clone()
+            } else {
+                String::new()
+            }
+            .into(),
             is_current: task.current,
-            has_due_date: !task.due_date.trim().is_empty(),
-            has_extra: !task.extra_info.trim().is_empty(),
-            progress: due_progress_ratio(task),
+            has_due_date: show_meta && !task.due_date.trim().is_empty(),
+            has_extra: show_meta && !task.extra_info.trim().is_empty(),
+            progress: if show_meta { due_progress_ratio(task) } else { 0.0 },
         })
         .collect()
 }
@@ -1128,20 +1221,38 @@ fn current_task(data: &model::AppData) -> (String, String) {
         .iter()
         .find(|task| task.current)
         .or_else(|| data.active.first())
-        .map(|task| (task.text.clone(), task_meta(task)))
+        .map(|task| {
+            let meta = if data.settings.show_item_meta {
+                task_meta(task)
+            } else {
+                String::new()
+            };
+            (task.text.clone(), meta)
+        })
         .unwrap_or_else(|| (String::new(), String::new()))
 }
 
 fn build_history_views(data: &model::AppData) -> Vec<HistoryView> {
+    let show_meta = data.settings.show_item_meta;
     data.history
         .iter()
         .rev()
         .map(|task| HistoryView {
             id: task.id as i32,
             title: task.text.clone().into(),
-            meta: history_meta(task).into(),
-            extra: task.extra_info.clone().into(),
-            has_extra: !task.extra_info.trim().is_empty(),
+            meta: if show_meta {
+                history_meta(task)
+            } else {
+                String::new()
+            }
+            .into(),
+            extra: if show_meta {
+                task.extra_info.clone()
+            } else {
+                String::new()
+            }
+            .into(),
+            has_extra: show_meta && !task.extra_info.trim().is_empty(),
         })
         .collect()
 }
