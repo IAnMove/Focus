@@ -40,6 +40,8 @@ struct AppState {
     sync_path: String,
     sync_device_id: String,
     sync_message: String,
+    startup_enabled: bool,
+    startup_message: String,
     tools_message: String,
     editing_task_id: Option<u64>,
     undo_item: Option<model::TaskItem>,
@@ -64,6 +66,7 @@ impl AppState {
         let sync_enabled = data.settings.sync.enabled;
         let sync_path = data.settings.sync.path.clone();
         let sync_device_id = data.settings.sync.device_id.clone();
+        let startup_enabled = storage::startup_enabled().unwrap_or(false);
 
         Self {
             data,
@@ -84,6 +87,8 @@ impl AppState {
             sync_path,
             sync_device_id,
             sync_message: String::new(),
+            startup_enabled,
+            startup_message: String::new(),
             tools_message: String::new(),
             editing_task_id: None,
             undo_item: None,
@@ -117,6 +122,10 @@ impl AppState {
 
     fn set_sync_message(&mut self, message: impl Into<String>) {
         self.sync_message = message.into();
+    }
+
+    fn set_startup_message(&mut self, message: impl Into<String>) {
+        self.startup_message = message.into();
     }
 
     fn submit_draft(&mut self) -> bool {
@@ -625,6 +634,26 @@ impl AppState {
         true
     }
 
+    fn toggle_startup(&mut self) -> bool {
+        let next = !self.startup_enabled;
+        match storage::set_startup_enabled(next) {
+            Ok(()) => {
+                self.startup_enabled = next;
+                self.set_startup_message(if next {
+                    "Launch on login enabled"
+                } else {
+                    "Launch on login disabled"
+                });
+                true
+            }
+            Err(error) => {
+                self.startup_enabled = storage::startup_enabled().unwrap_or(false);
+                self.set_startup_message(error.to_string());
+                false
+            }
+        }
+    }
+
 }
 
 fn main() -> Result<(), slint::PlatformError> {
@@ -1033,6 +1062,16 @@ fn bind_callbacks(app: &AppWindow, state: Rc<RefCell<AppState>>, undo_timer: Rc<
         }
     });
 
+    app.on_toggle_startup({
+        let app_weak = app_weak.clone();
+        let state = state.clone();
+        move || {
+            let mut state = state.borrow_mut();
+            state.toggle_startup();
+            refresh_if_possible(&app_weak, &state);
+        }
+    });
+
     app.on_save_sync_config({
         let app_weak = app_weak.clone();
         let state = state.clone();
@@ -1147,6 +1186,8 @@ fn refresh_ui(app: &AppWindow, state: &AppState) {
     app.set_sync_path(state.sync_path.clone().into());
     app.set_sync_device_id(state.sync_device_id.clone().into());
     app.set_sync_message(state.sync_message.clone().into());
+    app.set_startup_enabled(state.startup_enabled);
+    app.set_startup_message(state.startup_message.clone().into());
     app.set_about_version(env!("CARGO_PKG_VERSION").into());
     app.set_about_commit(BUILD_COMMIT.into());
     app.set_about_repo_url(PROJECT_REPO_URL.into());

@@ -582,6 +582,8 @@ export component AppWindow inherits Window {
     in-out property <string> sync-path: "";
     in-out property <string> sync-device-id: "";
     in-out property <string> sync-message: "";
+    in-out property <bool> startup-enabled: false;
+    in-out property <string> startup-message: "";
     in-out property <string> about-version: "";
     in-out property <string> about-commit: "";
     in-out property <string> about-repo-url: "";
@@ -626,6 +628,7 @@ export component AppWindow inherits Window {
     callback increase-font-scale();
     callback toggle-accessibility-mode();
     callback toggle-item-meta();
+    callback toggle-startup();
     callback open-project-link();
     callback save-sync-config();
     callback sync-now();
@@ -1133,6 +1136,45 @@ export component AppWindow inherits Window {
                                 Button {
                                     text: "Create tab";
                                     clicked => { root.submit-tab(); }
+                                }
+                            }
+                        }
+
+                        Rectangle {
+                            border-radius: 18px;
+                            border-width: 1px;
+                            border-color: root.border;
+                            background: root.panel-soft;
+                            min-height: 144px;
+
+                            VerticalLayout {
+                                padding: 14px;
+                                spacing: 8px;
+
+                                Text {
+                                    text: "System";
+                                    color: root.text-main;
+                                    font-size: root.font-section;
+                                    font-weight: 700;
+                                }
+
+                                Text {
+                                    text: "Launch focus automatically when you sign in on Windows or Linux.";
+                                    color: root.text-muted;
+                                    wrap: word-wrap;
+                                    font-size: root.font-body;
+                                }
+
+                                Button {
+                                    text: root.startup-enabled ? "Launch on login enabled" : "Launch on login disabled";
+                                    clicked => { root.toggle-startup(); }
+                                }
+
+                                if (root.startup-message != "") : Text {
+                                    text: root.startup-message;
+                                    color: root.text-muted;
+                                    wrap: word-wrap;
+                                    font-size: root.font-body;
                                 }
                             }
                         }

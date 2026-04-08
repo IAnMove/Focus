@@ -205,8 +205,77 @@ pub fn default_export_path() -> PathBuf {
         .join("focus-export.json")
 }
 
+pub fn startup_enabled() -> io::Result<bool> {
+    Ok(startup_path().is_some_and(|path| path.exists()))
+}
+
+pub fn set_startup_enabled(enabled: bool) -> io::Result<()> {
+    let Some(path) = startup_path() else {
+        return Err(io::Error::new(
+            io::ErrorKind::Unsupported,
+            "Startup is currently implemented for Windows and Linux.",
+        ));
+    };
+
+    if enabled {
+        if let Some(parent) = path.parent() {
+            fs::create_dir_all(parent)?;
+        }
+
+        let exe = env::current_exe()?;
+        #[cfg(target_os = "windows")]
+        {
+            let script = format!("@echo off\r\nstart \"\" \"{}\"\r\n", exe.display());
+            fs::write(path, script)?;
+        }
+
+        #[cfg(target_os = "linux")]
+        {
+            let entry = format!(
+                "[Desktop Entry]\nType=Application\nName=focus\nExec=\"{}\"\nX-GNOME-Autostart-enabled=true\n",
+                exe.display()
+            );
+            fs::write(path, entry)?;
+        }
+    } else if let Some(path) = startup_path() {
+        let _ = fs::remove_file(path);
+    }
+
+    Ok(())
+}
+
 fn data_file_path() -> io::Result<PathBuf> {
     Ok(data_dir_path()?.join("checklist.json"))
+}
+
+fn startup_path() -> Option<PathBuf> {
+    #[cfg(target_os = "windows")]
+    {
+        return home_dir().map(|home| {
+            home.join("AppData")
+                .join("Roaming")
+                .join("Microsoft")
+                .join("Windows")
+                .join("Start Menu")
+                .join("Programs")
+                .join("Startup")
+                .join("focus.cmd")
+        });
+    }
+
+    #[cfg(target_os = "linux")]
+    {
+        return home_dir().map(|home| {
+            home.join(".config")
+                .join("autostart")
+                .join("focus.desktop")
+        });
+    }
+
+    #[cfg(not(any(target_os = "windows", target_os = "linux")))]
+    {
+        None
+    }
 }
 
 fn data_dir_path() -> io::Result<PathBuf> {
