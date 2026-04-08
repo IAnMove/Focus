@@ -458,9 +458,9 @@ component TaskCard inherits Rectangle {
     border-width: 1px;
     border-color: task.is_current ? accent : border;
     background: task.is_current ? panel-alt : panel;
-    min-height: compact-actions
-        ? (task.has_extra ? (accessibility-mode ? 204px : 188px) : (accessibility-mode ? 178px : 164px))
-        : (task.has_extra ? (accessibility-mode ? 172px : 156px) : (accessibility-mode ? 148px : 132px));
+    min-height: task.has_extra
+        ? (accessibility-mode ? 172px : 156px)
+        : (accessibility-mode ? 148px : 132px);
 
     VerticalLayout {
         padding: 14px;
@@ -509,6 +509,88 @@ component TaskCard inherits Rectangle {
                 if (task.meta == "") : Rectangle {
                     background: transparent;
                     vertical-stretch: 1;
+                }
+            }
+
+            if (root.menu-open) : Rectangle {
+                border-radius: 14px;
+                border-width: 1px;
+                border-color: border;
+                background: panel-alt;
+                height: root.accessibility-mode ? 42px : 36px;
+                width: root.accessibility-mode ? 254px : 224px;
+
+                HorizontalLayout {
+                    padding-left: 6px;
+                    padding-right: 6px;
+                    padding-top: 3px;
+                    padding-bottom: 3px;
+                    spacing: 6px;
+
+                    RowIconButton {
+                        glyph: task.is_current ? "pin-on" : "pin-off";
+                        active: task.is_current;
+                        panel: panel;
+                        panel-alt: panel-alt;
+                        accent: accent;
+                        border: border;
+                        text-main: text-main;
+                        text-muted: text-muted;
+                        accessibility-mode: root.accessibility-mode;
+                        clicked => { root.toggle-current(task.id); }
+                    }
+
+                    RowIconButton {
+                        glyph: "edit";
+                        active: false;
+                        panel: panel;
+                        panel-alt: panel-alt;
+                        accent: accent;
+                        border: border;
+                        text-main: text-main;
+                        text-muted: text-muted;
+                        accessibility-mode: root.accessibility-mode;
+                        clicked => { root.edit(task.id); }
+                    }
+
+                    RowIconButton {
+                        glyph: "delete";
+                        active: false;
+                        panel: panel;
+                        panel-alt: panel-alt;
+                        accent: accent;
+                        border: border;
+                        text-main: text-main;
+                        text-muted: text-muted;
+                        accessibility-mode: root.accessibility-mode;
+                        clicked => { root.remove(task.id); }
+                    }
+
+                    RowIconButton {
+                        glyph: "up";
+                        active: false;
+                        panel: panel;
+                        panel-alt: panel-alt;
+                        accent: accent;
+                        border: border;
+                        text-main: text-main;
+                        text-muted: text-muted;
+                        accessibility-mode: root.accessibility-mode;
+                        clicked => { root.move-up(task.id); }
+                    }
+
+                    RowIconButton {
+                        glyph: "down";
+                        active: false;
+                        panel: panel;
+                        panel-alt: panel-alt;
+                        accent: accent;
+                        border: border;
+                        text-main: text-main;
+                        text-muted: text-muted;
+                        accessibility-mode: root.accessibility-mode;
+                        clicked => { root.move-down(task.id); }
+                    }
                 }
             }
 
@@ -615,7 +697,7 @@ component TaskCard inherits Rectangle {
             }
         }
 
-        if (root.menu-open) : Rectangle {
+        if (false) : Rectangle {
             border-radius: 16px;
             border-width: 1px;
             border-color: #4d4035;
