@@ -553,7 +553,7 @@ export component AppWindow inherits Window {
             border-color: root.border;
             background: root.panel-alt;
             height: 102px;
-            property <bool> show-header-actions: header_hover.has-hover;
+            property <bool> show-header-actions: header_hover.has-hover || add_action.hovered || history_action.hovered || tools_action.hovered || pin_action.hovered;
 
             header_hover := TouchArea {
                 x: 0;
