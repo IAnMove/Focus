@@ -24,6 +24,7 @@ const BUILD_COMMIT: &str = match option_env!("GIT_COMMIT_HASH") {
 struct AppState {
     data: model::AppData,
     active_tab: String,
+    open_task_menu_id: Option<u64>,
     tab_window_start: usize,
     visible_tab_count: usize,
     history_visible: bool,
@@ -71,6 +72,7 @@ impl AppState {
         Self {
             data,
             active_tab: "All".to_string(),
+            open_task_menu_id: None,
             tab_window_start: 0,
             visible_tab_count: 3,
             history_visible: false,
@@ -112,10 +114,19 @@ impl AppState {
         self.draft_message.clear();
         self.editing_task_id = None;
         self.draft_visible = false;
+        self.open_task_menu_id = None;
     }
 
     fn clear_tab_draft(&mut self) {
         self.draft_tab_name.clear();
+    }
+
+    fn toggle_task_menu(&mut self, task_id: u64) {
+        self.open_task_menu_id = if self.open_task_menu_id == Some(task_id) {
+            None
+        } else {
+            Some(task_id)
+        };
     }
 
     fn set_tools_message(&mut self, message: impl Into<String>) {
@@ -219,6 +230,7 @@ impl AppState {
             self.draft_visible = true;
             self.history_visible = false;
             self.tools_visible = false;
+            self.open_task_menu_id = None;
         }
     }
 
@@ -230,6 +242,7 @@ impl AppState {
             if self.editing_task_id == Some(task_id) {
                 self.clear_draft();
             }
+            self.open_task_menu_id = None;
             self.save();
         }
         changed
@@ -263,6 +276,7 @@ impl AppState {
             task.current = false;
         }
 
+        self.open_task_menu_id = None;
         self.save();
         true
     }
@@ -273,6 +287,7 @@ impl AppState {
         };
         self.data.history.push(item);
         self.data.history.truncate(250);
+        self.open_task_menu_id = None;
         self.save();
         true
     }
@@ -289,6 +304,7 @@ impl AppState {
         item.current = false;
         item.completed_at = storage::now_stamp();
         self.undo_item = Some(item);
+        self.open_task_menu_id = None;
 
         if self.editing_task_id == Some(task_id) {
             self.clear_draft();
@@ -306,6 +322,7 @@ impl AppState {
         item.done = false;
         item.completed_at.clear();
         self.data.active.insert(0, item);
+        self.open_task_menu_id = None;
         self.save();
         true
     }
@@ -315,6 +332,7 @@ impl AppState {
         self.ensure_active_tab_visible();
         self.history_visible = false;
         self.tools_visible = false;
+        self.open_task_menu_id = None;
     }
 
     fn toggle_history(&mut self) {
@@ -322,6 +340,7 @@ impl AppState {
         if self.history_visible {
             self.tools_visible = false;
             self.draft_visible = false;
+            self.open_task_menu_id = None;
         }
     }
 
@@ -330,6 +349,7 @@ impl AppState {
         if self.tools_visible {
             self.history_visible = false;
             self.draft_visible = false;
+            self.open_task_menu_id = None;
         }
     }
 
@@ -436,6 +456,7 @@ impl AppState {
         }
 
         self.data.active.swap(index, target as usize);
+        self.open_task_menu_id = None;
         self.save();
         true
     }
@@ -456,6 +477,7 @@ impl AppState {
             .unwrap_or(0);
         let next_index = (current_index + 1) % tabs.len();
         task.tab = tabs[next_index].name.clone();
+        self.open_task_menu_id = None;
         self.save();
         true
     }
@@ -975,6 +997,16 @@ fn bind_callbacks(app: &AppWindow, state: Rc<RefCell<AppState>>, undo_timer: Rc<
         }
     });
 
+    app.on_toggle_task_menu({
+        let app_weak = app_weak.clone();
+        let state = state.clone();
+        move |task_id| {
+            let mut state = state.borrow_mut();
+            state.toggle_task_menu(task_id as u64);
+            refresh_if_possible(&app_weak, &state);
+        }
+    });
+
     app.on_submit_tab({
         let app_weak = app_weak.clone();
         let state = state.clone();
@@ -1196,6 +1228,7 @@ fn refresh_ui(app: &AppWindow, state: &AppState) {
     );
     app.set_footer_text(format_footer(&state.data, &state.active_tab).into());
     app.set_active_tab_name(state.active_tab.clone().into());
+    app.set_task_menu_id(state.open_task_menu_id.map(|value| value as i32).unwrap_or(-1));
     app.set_pending_count(visible_items(&state.data, &state.active_tab).len() as i32);
     app.set_done_today_count(done_today as i32);
     app.set_done_month_count(done_month as i32);

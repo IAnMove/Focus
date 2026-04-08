@@ -198,7 +198,9 @@ component TaskCard inherits Rectangle {
     callback cycle-tab(task-id: int);
     callback drag-step(task-id: int, delta: int);
     callback open-link(url: string);
+    callback toggle-menu(task-id: int);
     in property <bool> compact-actions: false;
+    in property <bool> menu-open: false;
     in property <float> font-scale: 1.0;
     in property <bool> accessibility-mode: false;
 
@@ -231,6 +233,11 @@ component TaskCard inherits Rectangle {
                 spacing: 4px;
                 horizontal-stretch: 1;
 
+                if (task.meta == "") : Rectangle {
+                    background: transparent;
+                    vertical-stretch: 1;
+                }
+
                 Text {
                     text: task.title;
                     color: text-main;
@@ -245,9 +252,24 @@ component TaskCard inherits Rectangle {
                     font-size: 11px * font-scale * (accessibility-mode ? 1.08 : 1.0);
                     wrap: word-wrap;
                 }
+
+                if (task.meta == "") : Rectangle {
+                    background: transparent;
+                    vertical-stretch: 1;
+                }
             }
 
-            if (!root.compact-actions) : HorizontalLayout {
+            RowIconButton {
+                glyph: "...";
+                active: root.menu-open;
+                panel: panel;
+                accent: accent;
+                text-main: text-main;
+                accessibility-mode: root.accessibility-mode;
+                clicked => { root.toggle-menu(task.id); }
+            }
+
+            if (false) : HorizontalLayout {
                 spacing: 6px;
 
                 RowIconButton {
@@ -337,6 +359,135 @@ component TaskCard inherits Rectangle {
             }
         }
 
+        if (root.menu-open) : Rectangle {
+            border-radius: 14px;
+            border-width: 1px;
+            border-color: border;
+            background: panel;
+            min-height: compact-actions ? 96px : 52px;
+
+            VerticalLayout {
+                padding: 8px;
+                spacing: 8px;
+
+                HorizontalLayout {
+                    spacing: 6px;
+
+                    RowIconButton {
+                        glyph: task.is_current ? "â—‰" : "â—Ž";
+                        active: task.is_current;
+                        panel: panel;
+                        accent: accent;
+                        text-main: text-main;
+                        accessibility-mode: root.accessibility-mode;
+                        clicked => { root.toggle-current(task.id); }
+                    }
+
+                    RowIconButton {
+                        glyph: "âœŽ";
+                        active: false;
+                        panel: panel;
+                        accent: accent;
+                        text-main: text-main;
+                        accessibility-mode: root.accessibility-mode;
+                        clicked => { root.edit(task.id); }
+                    }
+
+                    RowIconButton {
+                        glyph: "Ã—";
+                        active: false;
+                        panel: panel;
+                        accent: accent;
+                        text-main: text-main;
+                        accessibility-mode: root.accessibility-mode;
+                        clicked => { root.remove(task.id); }
+                    }
+
+                    if (!root.compact-actions) : RowIconButton {
+                        glyph: "â†‘";
+                        active: false;
+                        panel: panel;
+                        accent: accent;
+                        text-main: text-main;
+                        accessibility-mode: root.accessibility-mode;
+                        clicked => { root.move-up(task.id); }
+                    }
+
+                    if (!root.compact-actions) : RowIconButton {
+                        glyph: "â†“";
+                        active: false;
+                        panel: panel;
+                        accent: accent;
+                        text-main: text-main;
+                        accessibility-mode: root.accessibility-mode;
+                        clicked => { root.move-down(task.id); }
+                    }
+
+                    if (!root.compact-actions) : RowIconButton {
+                        glyph: "â†º";
+                        active: false;
+                        panel: panel;
+                        accent: accent;
+                        text-main: text-main;
+                        accessibility-mode: root.accessibility-mode;
+                        clicked => { root.cycle-tab(task.id); }
+                    }
+
+                    if (!root.compact-actions) : DragHandle {
+                        task-id: task.id;
+                        panel: panel;
+                        border: border;
+                        text-muted: text-muted;
+                        accessibility-mode: root.accessibility-mode;
+                        drag-step(task-id, delta) => { root.drag-step(task-id, delta); }
+                    }
+                }
+
+                if (root.compact-actions) : HorizontalLayout {
+                    spacing: 6px;
+
+                    RowIconButton {
+                        glyph: "â†‘";
+                        active: false;
+                        panel: panel;
+                        accent: accent;
+                        text-main: text-main;
+                        accessibility-mode: root.accessibility-mode;
+                        clicked => { root.move-up(task.id); }
+                    }
+
+                    RowIconButton {
+                        glyph: "â†“";
+                        active: false;
+                        panel: panel;
+                        accent: accent;
+                        text-main: text-main;
+                        accessibility-mode: root.accessibility-mode;
+                        clicked => { root.move-down(task.id); }
+                    }
+
+                    RowIconButton {
+                        glyph: "â†º";
+                        active: false;
+                        panel: panel;
+                        accent: accent;
+                        text-main: text-main;
+                        accessibility-mode: root.accessibility-mode;
+                        clicked => { root.cycle-tab(task.id); }
+                    }
+
+                    DragHandle {
+                        task-id: task.id;
+                        panel: panel;
+                        border: border;
+                        text-muted: text-muted;
+                        accessibility-mode: root.accessibility-mode;
+                        drag-step(task-id, delta) => { root.drag-step(task-id, delta); }
+                    }
+                }
+            }
+        }
+
         if (task.has_due_date) : Rectangle {
             border-radius: 4px;
             background: #0f1728;
@@ -364,7 +515,7 @@ component TaskCard inherits Rectangle {
             clicked => { root.open-link(task.link_url); }
         }
 
-        if (root.compact-actions) : HorizontalLayout {
+        if (false) : HorizontalLayout {
             spacing: 6px;
 
             RowIconButton {
@@ -577,6 +728,7 @@ export component AppWindow inherits Window {
     in-out property <string> status-text: "Loading";
     in-out property <string> footer-text: "";
     in-out property <bool> on-top-enabled: true;
+    in-out property <int> task-menu-id: -1;
     in-out property <string> current-title: "";
     in-out property <string> current-meta: "";
     in-out property <string> active-tab-name: "All";
@@ -635,6 +787,7 @@ export component AppWindow inherits Window {
     callback move-task-down(task-id: int);
     callback cycle-task-tab(task-id: int);
     callback drag-task-step(task-id: int, delta: int);
+    callback toggle-task-menu(task-id: int);
     callback submit-tab();
     callback move-tab-up(name: string);
     callback move-tab-down(name: string);
@@ -992,6 +1145,7 @@ export component AppWindow inherits Window {
                         for task[index] in root.tasks : TaskCard {
                             task: task;
                             compact-actions: root.compact-task-actions;
+                            menu-open: root.task-menu-id == task.id;
                             font-scale: root.font-scale;
                             accessibility-mode: root.accessibility-mode;
                             panel: Math.mod(index, 2) == 0 ? root.panel-soft : root.panel;
@@ -1009,6 +1163,7 @@ export component AppWindow inherits Window {
                             cycle-tab(task-id) => { root.cycle-task-tab(task-id); }
                             drag-step(task-id, delta) => { root.drag-task-step(task-id, delta); }
                             open-link(url) => { root.open-task-link(url); }
+                            toggle-menu(task-id) => { root.toggle-task-menu(task-id); }
                         }
                     }
                 }
