@@ -546,20 +546,22 @@ export component AppWindow inherits Window {
         padding: 14px;
         spacing: 12px;
 
-        Rectangle {
+        header_shell := Rectangle {
             clip: true;
             border-radius: 24px;
             border-width: 1px;
             border-color: root.border;
             background: root.panel-alt;
             height: 102px;
+            property <bool> show-header-actions: title_hover.has-hover || actions_hover.has-hover;
 
             HorizontalLayout {
                 padding: 16px;
-                spacing: 12px;
+                spacing: 0;
 
-                title_block := Rectangle {
+                title_zone := Rectangle {
                     horizontal-stretch: 1;
+                    height: parent.height;
                     background: transparent;
 
                     title_hover := TouchArea {
@@ -590,11 +592,18 @@ export component AppWindow inherits Window {
                     }
                 }
 
-                Rectangle {
+                actions_zone := Rectangle {
                     width: 232px;
                     height: parent.height;
                     background: transparent;
-                    opacity: title_hover.has-hover || add_action.hovered || history_action.hovered || tools_action.hovered || pin_action.hovered ? 1 : 0;
+                    opacity: header_shell.show-header-actions ? 1 : 0;
+
+                    actions_hover := TouchArea {
+                        x: 0;
+                        y: 0;
+                        width: parent.width;
+                        height: parent.height;
+                    }
 
                     HorizontalLayout {
                         width: parent.width;
@@ -605,7 +614,6 @@ export component AppWindow inherits Window {
                             icon: "+";
                             label: "add";
                             active: root.draft-visible && root.main-visible;
-                            enabled: title_hover.has-hover || self.hovered || history_action.hovered || tools_action.hovered || pin_action.hovered;
                             panel: root.panel-alt;
                             accent: root.accent-warm;
                             text-main: root.text-main;
@@ -617,7 +625,6 @@ export component AppWindow inherits Window {
                             icon: root.history-visible ? "<" : "↺";
                             label: "history";
                             active: root.history-visible;
-                            enabled: title_hover.has-hover || add_action.hovered || self.hovered || tools_action.hovered || pin_action.hovered;
                             panel: root.panel-alt;
                             accent: root.accent-warm;
                             text-main: root.text-main;
@@ -629,7 +636,6 @@ export component AppWindow inherits Window {
                             icon: root.tools-visible ? "<" : "☰";
                             label: "tools";
                             active: root.tools-visible;
-                            enabled: title_hover.has-hover || add_action.hovered || history_action.hovered || self.hovered || pin_action.hovered;
                             panel: root.panel-alt;
                             accent: root.accent-warm;
                             text-main: root.text-main;
@@ -641,7 +647,6 @@ export component AppWindow inherits Window {
                             icon: root.on-top-enabled ? "◉" : "◎";
                             label: "pin";
                             active: root.on-top-enabled;
-                            enabled: title_hover.has-hover || add_action.hovered || history_action.hovered || tools_action.hovered || self.hovered;
                             panel: root.panel-alt;
                             accent: root.accent;
                             text-main: root.text-main;
