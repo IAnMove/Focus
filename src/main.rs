@@ -1072,6 +1072,10 @@ fn bind_callbacks(app: &AppWindow, state: Rc<RefCell<AppState>>, undo_timer: Rc<
         }
     });
 
+    app.on_open_task_link(move |url| {
+        let _ = open_project_link(url.as_str());
+    });
+
     app.on_save_sync_config({
         let app_weak = app_weak.clone();
         let state = state.clone();
@@ -1322,21 +1326,31 @@ fn build_task_views(data: &model::AppData, active_tab: &str) -> Vec<TaskView> {
     let show_meta = data.settings.show_item_meta;
     visible_items(data, active_tab)
         .into_iter()
-        .map(|task| TaskView {
-            id: task.id as i32,
-            title: task.text.clone().into(),
-            meta: if show_meta { task_meta(task) } else { String::new() }.into(),
-            due_label: if show_meta { due_label(task) } else { String::new() }.into(),
-            extra: if show_meta {
-                task.extra_info.clone()
-            } else {
-                String::new()
+        .map(|task| {
+            let link = extract_first_url(&task.text).or_else(|| extract_first_url(&task.extra_info));
+            TaskView {
+                id: task.id as i32,
+                title: task.text.clone().into(),
+                meta: if show_meta { task_meta(task) } else { String::new() }.into(),
+                due_label: if show_meta { due_label(task) } else { String::new() }.into(),
+                extra: if show_meta {
+                    task.extra_info.clone()
+                } else {
+                    String::new()
+                }
+                .into(),
+                link_label: link
+                    .as_deref()
+                    .map(short_link_label)
+                    .unwrap_or_default()
+                    .into(),
+                link_url: link.clone().unwrap_or_default().into(),
+                is_current: task.current,
+                has_due_date: show_meta && !task.due_date.trim().is_empty(),
+                has_extra: show_meta && !task.extra_info.trim().is_empty(),
+                has_link: link.is_some(),
+                progress: if show_meta { due_progress_ratio(task) } else { 0.0 },
             }
-            .into(),
-            is_current: task.current,
-            has_due_date: show_meta && !task.due_date.trim().is_empty(),
-            has_extra: show_meta && !task.extra_info.trim().is_empty(),
-            progress: if show_meta { due_progress_ratio(task) } else { 0.0 },
         })
         .collect()
 }
@@ -1362,22 +1376,32 @@ fn build_history_views(data: &model::AppData) -> Vec<HistoryView> {
     data.history
         .iter()
         .rev()
-        .map(|task| HistoryView {
-            id: task.id as i32,
-            title: task.text.clone().into(),
-            meta: if show_meta {
-                history_meta(task)
-            } else {
-                String::new()
+        .map(|task| {
+            let link = extract_first_url(&task.text).or_else(|| extract_first_url(&task.extra_info));
+            HistoryView {
+                id: task.id as i32,
+                title: task.text.clone().into(),
+                meta: if show_meta {
+                    history_meta(task)
+                } else {
+                    String::new()
+                }
+                .into(),
+                extra: if show_meta {
+                    task.extra_info.clone()
+                } else {
+                    String::new()
+                }
+                .into(),
+                link_label: link
+                    .as_deref()
+                    .map(short_link_label)
+                    .unwrap_or_default()
+                    .into(),
+                link_url: link.clone().unwrap_or_default().into(),
+                has_extra: show_meta && !task.extra_info.trim().is_empty(),
+                has_link: link.is_some(),
             }
-            .into(),
-            extra: if show_meta {
-                task.extra_info.clone()
-            } else {
-                String::new()
-            }
-            .into(),
-            has_extra: show_meta && !task.extra_info.trim().is_empty(),
         })
         .collect()
 }
@@ -1535,6 +1559,28 @@ fn normalize_due_input(value: &str) -> Result<String, String> {
     parse_dt(trimmed)
         .map(|dt| dt.format("%Y-%m-%d %H:%M").to_string())
         .ok_or_else(|| "Due date must use YYYY-MM-DD or YYYY-MM-DD HH:MM".to_string())
+}
+
+fn extract_first_url(text: &str) -> Option<String> {
+    text.split_whitespace().find_map(|part| {
+        let trimmed = part.trim_matches(|ch: char| {
+            matches!(ch, '"' | '\'' | '(' | ')' | '[' | ']' | '{' | '}' | ',' | '.' | ';')
+        });
+        if trimmed.starts_with("https://") || trimmed.starts_with("http://") {
+            Some(trimmed.to_string())
+        } else {
+            None
+        }
+    })
+}
+
+fn short_link_label(url: &str) -> String {
+    let trimmed = url.trim();
+    if trimmed.len() <= 48 {
+        format!("Open {}", trimmed)
+    } else {
+        format!("Open {}...", &trimmed[..45])
+    }
 }
 
 fn completion_counts(data: &model::AppData) -> (usize, usize, usize) {

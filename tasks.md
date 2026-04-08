@@ -82,7 +82,7 @@ Portar la aplicacion actual de checklist en Python a Rust usando Slint, mantenie
 - [x] 22. Portar selector y edicion completa de `due_date`, tiempo restante y progreso con el nivel de detalle del script original.
 - [x] 23. Recuperar drag and drop real para reordenar tareas, manteniendo persistencia correcta.
 - [x] 24. Recuperar inicio con el sistema en Windows y Linux.
-- [ ] 25. Recuperar enlaces clicables dentro del texto de la tarea y el comportamiento asociado.
+- [x] 25. Recuperar enlaces clicables dentro del texto de la tarea y el comportamiento asociado.
 - [ ] 26. Revisar paridad final de UX/UI frente a `focus.py` y actualizar `README.md` con el estado real.
 
 ## Tareas de sincronizacion externa
@@ -102,4 +102,4 @@ Portar la aplicacion actual de checklist en Python a Rust usando Slint, mantenie
 - Hacer un commit por cada tarea completada.
 
 ## Siguiente paso
-Tarea 25: recuperar enlaces clicables dentro del texto de la tarea y el comportamiento asociado.
+Tarea 26: revisar paridad final de UX/UI frente a `focus.py` y actualizar `README.md` con el estado real.

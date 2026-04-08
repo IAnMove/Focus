@@ -12,9 +12,12 @@ export struct TaskView {
     meta: string,
     due_label: string,
     extra: string,
+    link_label: string,
+    link_url: string,
     is_current: bool,
     has_due_date: bool,
     has_extra: bool,
+    has_link: bool,
     progress: float,
 }
 
@@ -23,7 +26,10 @@ export struct HistoryView {
     title: string,
     meta: string,
     extra: string,
+    link_label: string,
+    link_url: string,
     has_extra: bool,
+    has_link: bool,
 }
 
 export struct TabManagerView {
@@ -191,6 +197,7 @@ component TaskCard inherits Rectangle {
     callback move-down(task-id: int);
     callback cycle-tab(task-id: int);
     callback drag-step(task-id: int, delta: int);
+    callback open-link(url: string);
     in property <bool> compact-actions: false;
     in property <float> font-scale: 1.0;
     in property <bool> accessibility-mode: false;
@@ -352,6 +359,11 @@ component TaskCard inherits Rectangle {
             font-size: 12px * font-scale * (accessibility-mode ? 1.08 : 1.0);
         }
 
+        if (task.has_link) : Button {
+            text: task.link_label;
+            clicked => { root.open-link(task.link_url); }
+        }
+
         if (root.compact-actions) : HorizontalLayout {
             spacing: 6px;
 
@@ -437,6 +449,7 @@ component HistoryCard inherits Rectangle {
     in property <float> font-scale: 1.0;
     in property <bool> accessibility-mode: false;
     callback restore(task-id: int);
+    callback open-link(url: string);
 
     border-radius: 18px;
     border-width: 1px;
@@ -489,6 +502,11 @@ component HistoryCard inherits Rectangle {
             color: text-muted;
             wrap: word-wrap;
             font-size: 12px * font-scale * (accessibility-mode ? 1.08 : 1.0);
+        }
+
+        if (entry.has_link) : Button {
+            text: entry.link_label;
+            clicked => { root.open-link(entry.link_url); }
         }
     }
 }
@@ -629,6 +647,7 @@ export component AppWindow inherits Window {
     callback toggle-accessibility-mode();
     callback toggle-item-meta();
     callback toggle-startup();
+    callback open-task-link(url: string);
     callback open-project-link();
     callback save-sync-config();
     callback sync-now();
@@ -989,6 +1008,7 @@ export component AppWindow inherits Window {
                             move-down(task-id) => { root.move-task-down(task-id); }
                             cycle-tab(task-id) => { root.cycle-task-tab(task-id); }
                             drag-step(task-id, delta) => { root.drag-task-step(task-id, delta); }
+                            open-link(url) => { root.open-task-link(url); }
                         }
                     }
                 }
@@ -1068,6 +1088,7 @@ export component AppWindow inherits Window {
                             text-main: root.text-main;
                             text-muted: root.text-muted;
                             restore(task-id) => { root.restore-history(task-id); }
+                            open-link(url) => { root.open-task-link(url); }
                         }
                     }
                 }
