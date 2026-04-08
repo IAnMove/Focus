@@ -83,7 +83,7 @@ Portar la aplicacion actual de checklist en Python a Rust usando Slint, mantenie
 - [x] 23. Recuperar drag and drop real para reordenar tareas, manteniendo persistencia correcta.
 - [x] 24. Recuperar inicio con el sistema en Windows y Linux.
 - [x] 25. Recuperar enlaces clicables dentro del texto de la tarea y el comportamiento asociado.
-- [ ] 26. Revisar paridad final de UX/UI frente a `focus.py` y actualizar `README.md` con el estado real.
+- [x] 26. Revisar paridad final de UX/UI frente a `focus.py` y actualizar `README.md` con el estado real.
 
 ## Tareas de sincronizacion externa
 - [x] 27. Definir y documentar el esquema compartido de `focus-sync.json`, con ids estables, timestamps UTC y borrado logico.
@@ -102,4 +102,4 @@ Portar la aplicacion actual de checklist en Python a Rust usando Slint, mantenie
 - Hacer un commit por cada tarea completada.
 
 ## Siguiente paso
-Tarea 26: revisar paridad final de UX/UI frente a `focus.py` y actualizar `README.md` con el estado real.
+Tarea 31: propagar de forma proactiva cada cambio local al archivo de sync cuando la opcion este activada.
