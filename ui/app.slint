@@ -70,16 +70,204 @@ component TagChip inherits Rectangle {
     }
 }
 
-component RowIconButton inherits Button {
+component RowIconButton inherits Rectangle {
     in property <string> glyph;
     in property <bool> active;
     in property <color> panel;
     in property <color> accent;
     in property <color> text-main;
     in property <bool> accessibility-mode: false;
-    text: self.glyph;
-    min-width: accessibility-mode ? 42px : 36px;
-    min-height: accessibility-mode ? 40px : 34px;
+    callback clicked();
+
+    width: accessibility-mode ? 42px : 36px;
+    height: accessibility-mode ? 40px : 34px;
+    border-radius: 10px;
+    border-width: 1px;
+    border-color: active ? accent : #4b3f34;
+    background: active ? #3d352d : panel;
+
+    // check
+    if (glyph == "check" || glyph == "âœ“") : Rectangle {
+        x: (parent.width - 18px) / 2;
+        y: (parent.height - 18px) / 2;
+        width: 18px;
+        height: 18px;
+        border-radius: 9px;
+        border-width: 1px;
+        border-color: active ? accent : text-main;
+        background: transparent;
+
+        Rectangle {
+            x: 4px;
+            y: 8px;
+            width: 3px;
+            height: 3px;
+            background: accent;
+        }
+
+        Rectangle {
+            x: 8px;
+            y: 5px;
+            width: 3px;
+            height: 8px;
+            border-radius: 1px;
+            background: accent;
+        }
+
+        Rectangle {
+            x: 6px;
+            y: 11px;
+            width: 6px;
+            height: 2px;
+            background: accent;
+        }
+    }
+
+    // more
+    if (glyph == "more" || glyph == "...") : VerticalLayout {
+        x: (parent.width - 4px) / 2;
+        y: (parent.height - 14px) / 2;
+        width: 4px;
+        height: 14px;
+        spacing: 3px;
+
+        Rectangle { width: 4px; height: 4px; border-radius: 2px; background: text-main; }
+        Rectangle { width: 4px; height: 4px; border-radius: 2px; background: text-main; }
+        Rectangle { width: 4px; height: 4px; border-radius: 2px; background: text-main; }
+    }
+
+    // current / pin
+    if (glyph == "pin-on" || glyph == "pin-off" || glyph == "â—‰" || glyph == "â—Ž" || glyph == "Ã¢â€”â€°" || glyph == "Ã¢â€”Å½") : Rectangle {
+        x: (parent.width - 16px) / 2;
+        y: (parent.height - 16px) / 2;
+        width: 16px;
+        height: 16px;
+        border-radius: 8px;
+        border-width: 1px;
+        border-color: accent;
+        background: transparent;
+
+        if (glyph == "pin-on" || glyph == "â—‰" || glyph == "Ã¢â€”â€°") : Rectangle {
+            x: 4px;
+            y: 4px;
+            width: 8px;
+            height: 8px;
+            border-radius: 4px;
+            background: accent;
+        }
+    }
+
+    // edit
+    if (glyph == "edit" || glyph == "âœŽ" || glyph == "Ã¢Å“Å½") : Rectangle {
+        x: (parent.width - 14px) / 2;
+        y: (parent.height - 14px) / 2;
+        width: 14px;
+        height: 14px;
+        background: transparent;
+
+        Rectangle {
+            x: 2px;
+            y: 6px;
+            width: 10px;
+            height: 2px;
+            background: text-main;
+        }
+
+        Rectangle {
+            x: 8px;
+            y: 3px;
+            width: 3px;
+            height: 3px;
+            background: accent;
+        }
+
+        Rectangle {
+            x: 2px;
+            y: 9px;
+            width: 8px;
+            height: 2px;
+            background: accent;
+        }
+    }
+
+    // delete
+    if (glyph == "delete" || glyph == "Ã—" || glyph == "Ãƒâ€”") : Rectangle {
+        x: (parent.width - 14px) / 2;
+        y: (parent.height - 14px) / 2;
+        width: 14px;
+        height: 14px;
+        background: transparent;
+
+        Rectangle {
+            x: 3px;
+            y: 4px;
+            width: 8px;
+            height: 8px;
+            border-radius: 2px;
+            border-width: 1px;
+            border-color: text-main;
+            background: transparent;
+        }
+
+        Rectangle {
+            x: 2px;
+            y: 2px;
+            width: 10px;
+            height: 2px;
+            background: accent;
+        }
+    }
+
+    // up/down/cycle
+    if (glyph == "up" || glyph == "down" || glyph == "cycle" || glyph == "â†‘" || glyph == "â†“" || glyph == "â†º" || glyph == "Ã¢â€ â€˜" || glyph == "Ã¢â€ â€œ" || glyph == "Ã¢â€ Âº") : Rectangle {
+        x: (parent.width - 14px) / 2;
+        y: (parent.height - 14px) / 2;
+        width: 14px;
+        height: 14px;
+        background: transparent;
+
+        if (glyph == "up" || glyph == "â†‘" || glyph == "Ã¢â€ â€˜") : Text {
+            text: "^";
+            color: text-main;
+            font-size: 14px;
+            horizontal-alignment: center;
+            vertical-alignment: center;
+        }
+
+        if (glyph == "down" || glyph == "â†“" || glyph == "Ã¢â€ â€œ") : Text {
+            text: "v";
+            color: text-main;
+            font-size: 14px;
+            horizontal-alignment: center;
+            vertical-alignment: center;
+        }
+
+        if (glyph == "cycle" || glyph == "â†º" || glyph == "Ã¢â€ Âº") : Rectangle {
+            x: 2px;
+            y: 6px;
+            width: 8px;
+            height: 2px;
+            background: text-main;
+        }
+        if (glyph == "cycle" || glyph == "â†º" || glyph == "Ã¢â€ Âº") : Rectangle {
+            x: 8px;
+            y: 4px;
+            width: 4px;
+            height: 2px;
+            background: accent;
+        }
+        if (glyph == "cycle" || glyph == "â†º" || glyph == "Ã¢â€ Âº") : Rectangle {
+            x: 8px;
+            y: 8px;
+            width: 4px;
+            height: 2px;
+            background: accent;
+        }
+    }
+
+    TouchArea {
+        clicked => { root.clicked(); }
+    }
 }
 
 component HeaderIconButton inherits Rectangle {
@@ -153,6 +341,26 @@ component DragHandle inherits Rectangle {
         font-size: accessibility-mode ? 16px : 14px;
         horizontal-alignment: center;
         vertical-alignment: center;
+    }
+
+    Rectangle {
+        x: 0;
+        y: 0;
+        width: parent.width;
+        height: parent.height;
+        background: panel;
+
+        VerticalLayout {
+            x: (parent.width - 4px) / 2;
+            y: (parent.height - 14px) / 2;
+            width: 4px;
+            height: 14px;
+            spacing: 3px;
+
+            Rectangle { width: 4px; height: 4px; border-radius: 2px; background: text-muted; }
+            Rectangle { width: 4px; height: 4px; border-radius: 2px; background: text-muted; }
+            Rectangle { width: 4px; height: 4px; border-radius: 2px; background: text-muted; }
+        }
     }
 
     drag_touch := TouchArea {
