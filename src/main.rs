@@ -96,10 +96,12 @@ impl AppState {
         }
     }
 
-    fn save(&self) {
+    fn save(&mut self) {
         if let Some(store) = &self.store {
             let _ = store.save(&self.data);
         }
+
+        self.push_sync_if_enabled();
     }
 
     fn clear_draft(&mut self) {
@@ -126,6 +128,39 @@ impl AppState {
 
     fn set_startup_message(&mut self, message: impl Into<String>) {
         self.startup_message = message.into();
+    }
+
+    fn push_sync_if_enabled(&mut self) {
+        if !self.sync_enabled {
+            return;
+        }
+
+        let path = self.sync_path.trim();
+        if path.is_empty() {
+            self.set_sync_message("Sync enabled but no path configured");
+            return;
+        }
+
+        let device_id = self.sync_device_id.trim();
+        if device_id.is_empty() {
+            self.set_sync_message("Sync enabled but device id is empty");
+            return;
+        }
+
+        let path = PathBuf::from(path);
+        let sync_file = storage::app_data_to_sync_file(&self.data, device_id);
+        match storage::save_sync_file_to_path(&path, &sync_file) {
+            Ok(()) => {
+                self.data.settings.sync.enabled = true;
+                self.data.settings.sync.path = self.sync_path.clone();
+                self.data.settings.sync.device_id = self.sync_device_id.clone();
+                self.data.settings.sync.last_sync_at = storage::now_sync_stamp();
+                self.set_sync_message(format!("Synced to {}", path.display()));
+            }
+            Err(error) => {
+                self.set_sync_message(format!("Sync failed: {}", error));
+            }
+        }
     }
 
     fn submit_draft(&mut self) -> bool {
