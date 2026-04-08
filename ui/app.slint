@@ -74,8 +74,11 @@ component RowIconButton inherits Rectangle {
     in property <string> glyph;
     in property <bool> active;
     in property <color> panel;
+    in property <color> panel-alt: panel;
     in property <color> accent;
+    in property <color> border: accent;
     in property <color> text-main;
+    in property <color> text-muted: text-main;
     in property <bool> accessibility-mode: false;
     callback clicked();
 
@@ -84,11 +87,11 @@ component RowIconButton inherits Rectangle {
     border-radius: 12px;
     border-width: 1px;
     border-color: glyph == "delete" || glyph == "ÃƒÆ’Ã¢â‚¬â€" || glyph == "ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã¢â‚¬Â"
-        ? #7a4747
-        : (active ? accent : #56483b);
+        ? accent
+        : (active ? accent : border);
     background: glyph == "delete" || glyph == "ÃƒÆ’Ã¢â‚¬â€" || glyph == "ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã¢â‚¬Â"
-        ? #382829
-        : (active ? #4a3d31 : #322b25);
+        ? panel-alt
+        : (active ? panel-alt : panel);
 
     // check
     if (glyph == "check" || glyph == "âœ“") : Rectangle {
@@ -107,7 +110,7 @@ component RowIconButton inherits Rectangle {
             width: 4px;
             height: 2px;
             border-radius: 1px;
-            background: active ? #241912 : accent;
+            background: active ? panel : accent;
         }
 
         Rectangle {
@@ -116,7 +119,7 @@ component RowIconButton inherits Rectangle {
             width: 4px;
             height: 9px;
             border-radius: 1px;
-            background: active ? #241912 : accent;
+            background: active ? panel : accent;
         }
     }
 
@@ -128,9 +131,9 @@ component RowIconButton inherits Rectangle {
         height: 14px;
         spacing: 3px;
 
-        Rectangle { width: 4px; height: 4px; border-radius: 2px; background: active ? accent : text-main; }
-        Rectangle { width: 4px; height: 4px; border-radius: 2px; background: active ? accent : text-main; }
-        Rectangle { width: 4px; height: 4px; border-radius: 2px; background: active ? accent : text-main; }
+        Rectangle { width: 4px; height: 4px; border-radius: 2px; background: active ? accent : text-muted; }
+        Rectangle { width: 4px; height: 4px; border-radius: 2px; background: active ? accent : text-muted; }
+        Rectangle { width: 4px; height: 4px; border-radius: 2px; background: active ? accent : text-muted; }
     }
 
     // current / pin
@@ -369,8 +372,8 @@ component DragHandle inherits Rectangle {
     height: accessibility-mode ? 42px : 36px;
     border-radius: 12px;
     border-width: 1px;
-    border-color: #56483b;
-    background: #322b25;
+    border-color: border;
+    background: panel;
     property <length> drag-origin-y: 0px;
 
     Text {
@@ -386,7 +389,7 @@ component DragHandle inherits Rectangle {
         y: 0;
         width: parent.width;
         height: parent.height;
-        background: #322b25;
+        background: panel;
         border-radius: 12px;
 
         VerticalLayout {
@@ -470,8 +473,11 @@ component TaskCard inherits Rectangle {
                     glyph: "✓";
                     active: false;
                     panel: panel;
+                    panel-alt: panel-alt;
                     accent: accent;
+                    border: border;
                     text-main: text-main;
+                    text-muted: text-muted;
                     accessibility-mode: root.accessibility-mode;
                     clicked => { root.complete(task.id); }
                 }
@@ -510,8 +516,11 @@ component TaskCard inherits Rectangle {
                 glyph: "...";
                 active: root.menu-open;
                 panel: panel;
+                panel-alt: panel-alt;
                 accent: accent;
+                border: border;
                 text-main: text-main;
+                text-muted: text-muted;
                 accessibility-mode: root.accessibility-mode;
                 clicked => { root.toggle-menu(task.id); }
             }
