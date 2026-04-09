@@ -95,7 +95,7 @@ Portar la aplicacion actual de checklist en Python a Rust usando Slint, mantenie
 - [x] 32. Implementar merge basico entre cache local y archivo externo con prioridad por `updated_at` y soporte de `deleted_at`.
 - [x] 33. Documentar para Android el contrato de lectura/escritura y las reglas minimas de compatibilidad.
 - [x] 35. Corregir el layout de filas de tarea para titulos multilinea, metadata opcional y un pulido visual fino sin reintroducir huecos vacios.
-- [ ] 36. Introducir un proveedor de sync configurable (`local_file` y `google_drive`) en modelos, persistencia y `Tools`, manteniendo compatibilidad con la ruta local actual.
+- [x] 36. Introducir un proveedor de sync configurable (`local_file` y `google_drive`) en modelos, persistencia y `Tools`, manteniendo compatibilidad con la ruta local actual.
 - [ ] 37. Preparar la configuracion inicial de Google Drive en escritorio (`client_id`, `file_id` y mensajes de estado) y documentar el flujo OAuth pendiente.
 
 ## Criterios de migracion
@@ -106,4 +106,4 @@ Portar la aplicacion actual de checklist en Python a Rust usando Slint, mantenie
 - Hacer un commit por cada tarea completada.
 
 ## Siguiente paso
-Tarea 36: introducir un proveedor de sync configurable (`local_file` y `google_drive`) en modelos, persistencia y `Tools`.
+Tarea 37: preparar la configuracion inicial de Google Drive en escritorio (`client_id`, `file_id` y mensajes de estado) y documentar el flujo OAuth pendiente.

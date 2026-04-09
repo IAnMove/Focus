@@ -218,10 +218,36 @@ impl Settings {
     }
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Default)]
+#[serde(rename_all = "snake_case")]
+pub enum SyncProvider {
+    #[default]
+    LocalFile,
+    GoogleDrive,
+}
+
+impl SyncProvider {
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Self::LocalFile => "local_file",
+            Self::GoogleDrive => "google_drive",
+        }
+    }
+
+    pub fn from_str(value: &str) -> Self {
+        match value.trim().to_ascii_lowercase().as_str() {
+            "google_drive" => Self::GoogleDrive,
+            _ => Self::LocalFile,
+        }
+    }
+}
+
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Default)]
 pub struct SyncConfig {
     #[serde(default)]
     pub enabled: bool,
+    #[serde(default)]
+    pub provider: SyncProvider,
     #[serde(default)]
     pub path: String,
     #[serde(default)]
@@ -718,6 +744,7 @@ mod tests {
     fn normalizes_local_sync_config() {
         let config = SyncConfig {
             enabled: true,
+            provider: SyncProvider::LocalFile,
             path: "  C:/sync/focus-sync.json  ".into(),
             device_id: "  desktop-win11  ".into(),
             last_sync_at: "  2026-04-07T20:41:12Z ".into(),
@@ -725,6 +752,7 @@ mod tests {
         .normalized();
 
         assert!(config.enabled);
+        assert_eq!(config.provider, SyncProvider::LocalFile);
         assert_eq!(config.path, "C:/sync/focus-sync.json");
         assert_eq!(config.device_id, "desktop-win11");
         assert_eq!(config.last_sync_at, "2026-04-07T20:41:12Z");

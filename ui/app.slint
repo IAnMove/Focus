@@ -1135,6 +1135,7 @@ export component AppWindow inherits Window {
     in-out property <string> transfer-path: "";
     in-out property <string> tools-message: "";
     in-out property <bool> sync-enabled: false;
+    in-out property <string> sync-provider: "local_file";
     in-out property <string> sync-path: "";
     in-out property <string> sync-device-id: "";
     in-out property <string> sync-message: "";
@@ -1994,7 +1995,7 @@ export component AppWindow inherits Window {
                             border-width: 1px;
                             border-color: root.border;
                             background: root.panel-soft;
-                            min-height: 190px;
+                            min-height: 236px;
 
                             VerticalLayout {
                                 padding: 14px;
@@ -2008,15 +2009,67 @@ export component AppWindow inherits Window {
                                 }
 
                                 Text {
-                                    text: "Optional shared source of truth for desktop and Android.";
+                                    text: root.sync-provider == "google_drive"
+                                        ? "Shared source of truth via provider abstraction. Google Drive wiring is configured here and transport comes next."
+                                        : "Optional shared source of truth for desktop and Android.";
                                     color: root.text-muted;
                                     wrap: word-wrap;
                                     font-size: root.font-body;
                                 }
 
-                                LineEdit {
+                                HorizontalLayout {
+                                    spacing: 8px;
+
+                                    AppButton {
+                                        text: "Local file";
+                                        primary: root.sync-provider == "local_file";
+                                        panel: root.panel;
+                                        panel-alt: root.panel-alt;
+                                        accent: root.accent;
+                                        border: root.border;
+                                        text-main: root.text-main;
+                                        text-muted: root.text-muted;
+                                        font-scale: root.font-scale;
+                                        accessibility-mode: root.accessibility-mode;
+                                        clicked => { root.sync-provider = "local_file"; }
+                                    }
+
+                                    AppButton {
+                                        text: "Google Drive";
+                                        primary: root.sync-provider == "google_drive";
+                                        panel: root.panel;
+                                        panel-alt: root.panel-alt;
+                                        accent: root.accent-warm;
+                                        border: root.border;
+                                        text-main: root.text-main;
+                                        text-muted: root.text-muted;
+                                        font-scale: root.font-scale;
+                                        accessibility-mode: root.accessibility-mode;
+                                        clicked => { root.sync-provider = "google_drive"; }
+                                    }
+                                }
+
+                                if (root.sync-provider == "local_file") : LineEdit {
                                     text <=> root.sync-path;
                                     placeholder-text: "Path to focus-sync.json";
+                                }
+
+                                if (root.sync-provider == "google_drive") : Rectangle {
+                                    border-radius: 14px;
+                                    border-width: 1px;
+                                    border-color: root.border;
+                                    background: root.panel;
+                                    min-height: 62px;
+
+                                    Text {
+                                        x: 10px;
+                                        y: 10px;
+                                        width: parent.width - 20px;
+                                        text: "Provider selected: Google Drive. OAuth desktop flow and shared file selection are the next step.";
+                                        color: root.text-muted;
+                                        wrap: word-wrap;
+                                        font-size: root.font-body;
+                                    }
                                 }
 
                                 LineEdit {

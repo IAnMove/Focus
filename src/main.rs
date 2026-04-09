@@ -38,6 +38,7 @@ struct AppState {
     draft_tab_name: String,
     transfer_path: String,
     sync_enabled: bool,
+    sync_provider: model::SyncProvider,
     sync_path: String,
     sync_device_id: String,
     sync_message: String,
@@ -65,6 +66,7 @@ struct ThemePalette {
 impl AppState {
     fn new(data: model::AppData, store: Option<storage::DataStore>) -> Self {
         let sync_enabled = data.settings.sync.enabled;
+        let sync_provider = data.settings.sync.provider;
         let sync_path = data.settings.sync.path.clone();
         let sync_device_id = data.settings.sync.device_id.clone();
         let startup_enabled = storage::startup_enabled().unwrap_or(false);
@@ -86,6 +88,7 @@ impl AppState {
             draft_tab_name: String::new(),
             transfer_path: storage::default_export_path().display().to_string(),
             sync_enabled,
+            sync_provider,
             sync_path,
             sync_device_id,
             sync_message: String::new(),
@@ -171,6 +174,13 @@ impl AppState {
             return;
         }
 
+        if self.sync_provider == model::SyncProvider::GoogleDrive {
+            self.set_sync_message(
+                "Google Drive provider selected. OAuth transport is the next step; local file sync is unchanged.",
+            );
+            return;
+        }
+
         let path = self.sync_path.trim();
         if path.is_empty() {
             self.set_sync_message("Sync enabled but no path configured");
@@ -203,6 +213,7 @@ impl AppState {
             Ok(()) => {
                 let mut local_settings = self.data.settings.clone();
                 local_settings.sync.enabled = true;
+                local_settings.sync.provider = self.sync_provider;
                 local_settings.sync.path = self.sync_path.clone();
                 local_settings.sync.device_id = self.sync_device_id.clone();
                 local_settings.sync.last_sync_at = storage::now_sync_stamp();
@@ -667,6 +678,7 @@ impl AppState {
 
     fn save_sync_config(&mut self) -> bool {
         self.data.settings.sync.enabled = self.sync_enabled;
+        self.data.settings.sync.provider = self.sync_provider;
         self.data.settings.sync.path = self.sync_path.trim().to_string();
         self.data.settings.sync.device_id = self.sync_device_id.trim().to_string();
         self.save();
@@ -677,6 +689,13 @@ impl AppState {
     fn sync_now(&mut self) -> bool {
         if !self.sync_enabled {
             self.set_sync_message("Enable sync first.");
+            return false;
+        }
+
+        if self.sync_provider == model::SyncProvider::GoogleDrive {
+            self.set_sync_message(
+                "Google Drive provider selected. OAuth transport is not wired yet; keep using local file for active sync.",
+            );
             return false;
         }
 
@@ -691,6 +710,7 @@ impl AppState {
             Ok(sync_file) => {
                 let mut local_settings = self.data.settings.clone();
                 local_settings.sync.enabled = self.sync_enabled;
+                local_settings.sync.provider = self.sync_provider;
                 local_settings.sync.path = path.clone();
                 local_settings.sync.device_id = self.sync_device_id.trim().to_string();
                 let local_sync = storage::app_data_to_sync_file(&self.data, self.sync_device_id.trim());
@@ -1241,6 +1261,7 @@ fn bind_callbacks(app: &AppWindow, state: Rc<RefCell<AppState>>, undo_timer: Rc<
             if let Some(app) = app_weak.upgrade() {
                 let mut state = state.borrow_mut();
                 state.sync_enabled = app.get_sync_enabled();
+                state.sync_provider = model::SyncProvider::from_str(app.get_sync_provider().as_str());
                 state.sync_path = app.get_sync_path().to_string();
                 state.sync_device_id = app.get_sync_device_id().to_string();
                 state.save_sync_config();
@@ -1256,6 +1277,7 @@ fn bind_callbacks(app: &AppWindow, state: Rc<RefCell<AppState>>, undo_timer: Rc<
             if let Some(app) = app_weak.upgrade() {
                 let mut state = state.borrow_mut();
                 state.sync_enabled = app.get_sync_enabled();
+                state.sync_provider = model::SyncProvider::from_str(app.get_sync_provider().as_str());
                 state.sync_path = app.get_sync_path().to_string();
                 state.sync_device_id = app.get_sync_device_id().to_string();
                 state.sync_now();
@@ -1346,6 +1368,7 @@ fn refresh_ui(app: &AppWindow, state: &AppState) {
     app.set_transfer_path(state.transfer_path.clone().into());
     app.set_tools_message(state.tools_message.clone().into());
     app.set_sync_enabled(state.sync_enabled);
+    app.set_sync_provider(state.sync_provider.as_str().into());
     app.set_sync_path(state.sync_path.clone().into());
     app.set_sync_device_id(state.sync_device_id.clone().into());
     app.set_sync_message(state.sync_message.clone().into());
