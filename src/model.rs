@@ -26,6 +26,8 @@ pub enum TabPriority {
 pub struct TabSpec {
     #[serde(default)]
     pub sync_id: String,
+    #[serde(default)]
+    pub sync_updated_at: String,
     pub name: String,
     #[serde(default)]
     pub priority: TabPriority,
@@ -35,6 +37,7 @@ impl Default for TabSpec {
     fn default() -> Self {
         Self {
             sync_id: default_general_tab_sync_id(),
+            sync_updated_at: String::new(),
             name: GENERAL_TAB_NAME.to_string(),
             priority: TabPriority::Normal,
         }
@@ -52,6 +55,7 @@ impl TabSpec {
         } else {
             self.sync_id = self.sync_id.trim().to_string();
         }
+        self.sync_updated_at = self.sync_updated_at.trim().to_string();
         Some(self)
     }
 }
@@ -61,6 +65,8 @@ pub struct TaskItem {
     pub id: u64,
     #[serde(default)]
     pub sync_id: String,
+    #[serde(default)]
+    pub sync_updated_at: String,
     pub text: String,
     #[serde(default)]
     pub done: bool,
@@ -83,6 +89,7 @@ impl TaskItem {
         Self {
             id,
             sync_id: task_sync_id_from_legacy_id(id),
+            sync_updated_at: String::new(),
             text: text.into().trim().to_string(),
             done: false,
             current: false,
@@ -107,6 +114,7 @@ impl TaskItem {
         } else {
             self.sync_id = self.sync_id.trim().to_string();
         }
+        self.sync_updated_at = self.sync_updated_at.trim().to_string();
         self.done = false;
         self.completed_at.clear();
         self.tab = normalize_tab_name(&self.tab);
@@ -129,6 +137,7 @@ impl TaskItem {
         } else {
             self.sync_id = self.sync_id.trim().to_string();
         }
+        self.sync_updated_at = self.sync_updated_at.trim().to_string();
         self.done = true;
         self.current = false;
         self.tab = normalize_tab_name(&self.tab);
@@ -158,6 +167,8 @@ pub struct Settings {
     #[serde(default = "default_always_on_top")]
     pub always_on_top: bool,
     #[serde(default)]
+    pub preferences_updated_at: String,
+    #[serde(default)]
     pub sync: SyncConfig,
     #[serde(flatten)]
     pub extra: BTreeMap<String, Value>,
@@ -174,6 +185,7 @@ impl Default for Settings {
             show_item_meta: default_show_item_meta(),
             tab_visible_count: default_tab_visible_count(),
             always_on_top: default_always_on_top(),
+            preferences_updated_at: String::new(),
             sync: SyncConfig::default(),
             extra: BTreeMap::new(),
         }
@@ -188,6 +200,7 @@ impl Settings {
         }
         self.font_scale = self.font_scale.clamp(0.8, 1.8);
         self.tab_visible_count = self.tab_visible_count.clamp(2, 12);
+        self.preferences_updated_at = self.preferences_updated_at.trim().to_string();
         self.sync = self.sync.normalized();
         self.custom_palette = self
             .custom_palette
@@ -328,6 +341,8 @@ pub struct SyncPreferences {
     pub accessibility_mode: bool,
     #[serde(default = "default_show_item_meta")]
     pub show_item_meta: bool,
+    #[serde(default)]
+    pub updated_at: String,
 }
 
 impl Default for SyncPreferences {
@@ -338,6 +353,7 @@ impl Default for SyncPreferences {
             font_scale: default_font_scale(),
             accessibility_mode: false,
             show_item_meta: default_show_item_meta(),
+            updated_at: String::new(),
         }
     }
 }
@@ -348,6 +364,7 @@ impl SyncPreferences {
             self.theme_name = default_theme_name();
         }
         self.font_scale = self.font_scale.clamp(0.8, 1.8);
+        self.updated_at = self.updated_at.trim().to_string();
         self.custom_palette = self
             .custom_palette
             .into_iter()
@@ -599,11 +616,13 @@ mod tests {
         let tabs = vec![
             TabSpec {
                 sync_id: String::new(),
+                sync_updated_at: String::new(),
                 name: "   Work   Sprint   ".into(),
                 priority: TabPriority::High,
             },
             TabSpec {
                 sync_id: String::new(),
+                sync_updated_at: String::new(),
                 name: String::new(),
                 priority: TabPriority::Low,
             },
@@ -621,6 +640,7 @@ mod tests {
         let active = TaskItem {
             id: 0,
             sync_id: String::new(),
+            sync_updated_at: String::new(),
             text: "  Ship Rust port  ".into(),
             done: true,
             current: true,
@@ -752,7 +772,8 @@ mod tests {
               "theme_name": "warm",
               "font_scale": 1.0,
               "accessibility_mode": false,
-              "show_item_meta": true
+              "show_item_meta": true,
+              "updated_at": "2026-04-07T20:41:12Z"
             }
           }
         }

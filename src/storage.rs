@@ -102,7 +102,8 @@ pub fn save_sync_file_to_path(path: &PathBuf, data: &SyncFile) -> io::Result<()>
 
 pub fn app_data_to_sync_file(data: &AppData, device_id: &str) -> SyncFile {
     let normalized = data.clone().normalized();
-    let updated_at = now_sync_stamp();
+    let fallback_updated_at = default_local_sync_updated_at(&normalized);
+    let preferences_updated_at = effective_preferences_updated_at(&normalized, &fallback_updated_at);
 
     let tabs = normalized
         .settings
@@ -118,19 +119,29 @@ pub fn app_data_to_sync_file(data: &AppData, device_id: &str) -> SyncFile {
             name: tab.name.clone(),
             priority: tab.priority,
             order: order as i32,
-            updated_at: updated_at.clone(),
+            updated_at: effective_tab_updated_at(tab, &fallback_updated_at),
             deleted_at: None,
         })
-        .collect();
+        .collect::<Vec<_>>();
 
     let active_tasks = normalized
         .active
         .iter()
         .enumerate()
-        .map(|(order, task)| sync_task_from_local(task, order as i32, SyncTaskStatus::Active));
+        .map(|(order, task)| {
+            sync_task_from_local(task, order as i32, SyncTaskStatus::Active, &fallback_updated_at)
+        });
     let history_tasks = normalized.history.iter().enumerate().map(|(order, task)| {
-        sync_task_from_local(task, order as i32, SyncTaskStatus::Completed)
+        sync_task_from_local(task, order as i32, SyncTaskStatus::Completed, &fallback_updated_at)
     });
+    let tasks = active_tasks.chain(history_tasks).collect::<Vec<_>>();
+    let updated_at = latest_sync_stamp(
+        tabs.iter()
+            .map(sync_tab_version_stamp)
+            .chain(tasks.iter().map(sync_task_version_stamp))
+            .chain(std::iter::once(preferences_updated_at.clone())),
+    )
+    .unwrap_or_else(|| fallback_updated_at.clone());
 
     SyncFile {
         schema_version: crate::model::default_sync_schema_version(),
@@ -142,13 +153,14 @@ pub fn app_data_to_sync_file(data: &AppData, device_id: &str) -> SyncFile {
         },
         shared: SyncSharedData {
             tabs,
-            tasks: active_tasks.chain(history_tasks).collect(),
+            tasks,
             preferences: SyncPreferences {
                 theme_name: normalized.settings.theme_name,
                 custom_palette: normalized.settings.custom_palette,
                 font_scale: normalized.settings.font_scale,
                 accessibility_mode: normalized.settings.accessibility_mode,
                 show_item_meta: normalized.settings.show_item_meta,
+                updated_at: preferences_updated_at,
             },
         }
         .normalized(),
@@ -165,6 +177,11 @@ pub fn sync_file_to_app_data(sync: &SyncFile, local_settings: Option<&Settings>)
     settings.font_scale = normalized.shared.preferences.font_scale;
     settings.accessibility_mode = normalized.shared.preferences.accessibility_mode;
     settings.show_item_meta = normalized.shared.preferences.show_item_meta;
+    settings.preferences_updated_at = if normalized.shared.preferences.updated_at.trim().is_empty() {
+        normalized.updated_at.clone()
+    } else {
+        normalized.shared.preferences.updated_at.clone()
+    };
 
     let mut tabs: Vec<TabSpec> = normalized
         .shared
@@ -173,6 +190,7 @@ pub fn sync_file_to_app_data(sync: &SyncFile, local_settings: Option<&Settings>)
         .filter(|tab| tab.deleted_at.is_none())
         .map(|tab| TabSpec {
             sync_id: tab.id.clone(),
+            sync_updated_at: tab.updated_at.clone(),
             name: tab.name.clone(),
             priority: tab.priority,
         })
@@ -314,7 +332,12 @@ fn home_dir() -> Option<PathBuf> {
         .or_else(|| env::var_os("USERPROFILE").map(PathBuf::from))
 }
 
-fn sync_task_from_local(task: &TaskItem, order: i32, status: SyncTaskStatus) -> SyncTaskRecord {
+fn sync_task_from_local(
+    task: &TaskItem,
+    order: i32,
+    status: SyncTaskStatus,
+    fallback_updated_at: &str,
+) -> SyncTaskRecord {
     SyncTaskRecord {
         id: if task.sync_id.trim().is_empty() {
             task_sync_id_from_legacy_id(task.id)
@@ -331,13 +354,7 @@ fn sync_task_from_local(task: &TaskItem, order: i32, status: SyncTaskStatus) -> 
         current: task.current && matches!(status, SyncTaskStatus::Active),
         order,
         created_at: local_stamp_to_sync(&task.created_at),
-        updated_at: local_stamp_to_sync(
-            if matches!(status, SyncTaskStatus::Completed) && !task.completed_at.trim().is_empty() {
-                &task.completed_at
-            } else {
-                &task.created_at
-            },
-        ),
+        updated_at: effective_task_updated_at(task, status, fallback_updated_at),
         completed_at: if task.completed_at.trim().is_empty() {
             None
         } else {
@@ -367,6 +384,7 @@ fn sync_tasks_to_local(sync: &SyncFile, status: SyncTaskStatus, tabs: &[TabSpec]
         .map(|(index, task)| TaskItem {
             id: sync_task_numeric_id(&task.id).unwrap_or(index as u64 + 1),
             sync_id: task.id.clone(),
+            sync_updated_at: task.updated_at.clone(),
             text: task.text.clone(),
             done: matches!(status, SyncTaskStatus::Completed),
             current: matches!(status, SyncTaskStatus::Active) && task.current,
@@ -385,6 +403,80 @@ fn sync_tasks_to_local(sync: &SyncFile, status: SyncTaskStatus, tabs: &[TabSpec]
             tab: resolve_tab_name(&task.tab_id, tabs),
         })
         .collect()
+}
+
+fn default_local_sync_updated_at(data: &AppData) -> String {
+    if !data.settings.sync.last_sync_at.trim().is_empty() {
+        normalize_sync_meta_stamp(&data.settings.sync.last_sync_at, &now_sync_stamp())
+    } else {
+        now_sync_stamp()
+    }
+}
+
+fn effective_preferences_updated_at(data: &AppData, fallback: &str) -> String {
+    normalize_sync_meta_stamp(&data.settings.preferences_updated_at, fallback)
+}
+
+fn effective_tab_updated_at(tab: &TabSpec, fallback: &str) -> String {
+    normalize_sync_meta_stamp(&tab.sync_updated_at, fallback)
+}
+
+fn effective_task_updated_at(task: &TaskItem, status: SyncTaskStatus, fallback: &str) -> String {
+    if !task.sync_updated_at.trim().is_empty() {
+        return normalize_sync_meta_stamp(&task.sync_updated_at, fallback);
+    }
+
+    if matches!(status, SyncTaskStatus::Completed) && !task.completed_at.trim().is_empty() {
+        return normalize_sync_meta_stamp(&task.completed_at, fallback);
+    }
+
+    if !task.created_at.trim().is_empty() {
+        return normalize_sync_meta_stamp(&task.created_at, fallback);
+    }
+
+    fallback.to_string()
+}
+
+fn normalize_sync_meta_stamp(value: &str, fallback: &str) -> String {
+    let value = value.trim();
+    if value.is_empty() {
+        return fallback.to_string();
+    }
+
+    let normalized = local_stamp_to_sync(value);
+    if normalized.trim().is_empty() {
+        fallback.to_string()
+    } else {
+        normalized
+    }
+}
+
+fn sync_task_version_stamp(task: &SyncTaskRecord) -> String {
+    task.deleted_at
+        .as_deref()
+        .filter(|value| !value.trim().is_empty())
+        .unwrap_or(task.updated_at.as_str())
+        .trim()
+        .to_string()
+}
+
+fn sync_tab_version_stamp(tab: &SyncTabRecord) -> String {
+    tab.deleted_at
+        .as_deref()
+        .filter(|value| !value.trim().is_empty())
+        .unwrap_or(tab.updated_at.as_str())
+        .trim()
+        .to_string()
+}
+
+fn latest_sync_stamp<I>(stamps: I) -> Option<String>
+where
+    I: IntoIterator<Item = String>,
+{
+    stamps
+        .into_iter()
+        .filter(|stamp| !stamp.trim().is_empty())
+        .max_by(|left, right| compare_sync_stamps(left, right))
 }
 
 fn resolve_tab_name(tab_id: &str, tabs: &[TabSpec]) -> String {
@@ -428,6 +520,219 @@ fn sync_stamp_to_local(value: &str) -> String {
         .unwrap_or_else(|_| value.to_string())
 }
 
+pub fn merge_sync_files(
+    local: &SyncFile,
+    remote: &SyncFile,
+    last_sync_at: &str,
+    device_id: &str,
+) -> SyncFile {
+    let local = local.clone().normalized();
+    let remote = remote.clone().normalized();
+    let now = now_sync_stamp();
+    let normalized_last_sync = normalize_sync_meta_stamp(last_sync_at, "");
+
+    let tabs = merge_tab_records(&local.shared.tabs, &remote.shared.tabs, &normalized_last_sync, &now);
+    let tasks = merge_task_records(&local.shared.tasks, &remote.shared.tasks, &normalized_last_sync, &now);
+    let preferences = merge_preferences(
+        &local.shared.preferences,
+        &remote.shared.preferences,
+        &normalized_last_sync,
+    );
+    let updated_at = latest_sync_stamp(
+        tabs.iter()
+            .map(sync_tab_version_stamp)
+            .chain(tasks.iter().map(sync_task_version_stamp))
+            .chain(std::iter::once(preferences.updated_at.clone()))
+            .chain(std::iter::once(local.updated_at.clone()))
+            .chain(std::iter::once(remote.updated_at.clone())),
+    )
+    .unwrap_or_else(|| now.clone());
+
+    SyncFile {
+        schema_version: crate::model::default_sync_schema_version(),
+        updated_at,
+        last_writer: SyncWriter {
+            device_id: device_id.trim().to_string(),
+            app_id: "focus-desktop".to_string(),
+            app_version: env!("CARGO_PKG_VERSION").to_string(),
+        },
+        shared: SyncSharedData {
+            tabs,
+            tasks,
+            preferences,
+        }
+        .normalized(),
+        extra: remote.extra.clone(),
+    }
+    .normalized()
+}
+
+fn merge_tab_records(
+    local: &[SyncTabRecord],
+    remote: &[SyncTabRecord],
+    last_sync_at: &str,
+    now: &str,
+) -> Vec<SyncTabRecord> {
+    let mut merged = std::collections::BTreeMap::new();
+
+    for record in remote {
+        merged.insert(record.id.clone(), record.clone());
+    }
+
+    for record in local {
+        merged
+            .entry(record.id.clone())
+            .and_modify(|existing| *existing = pick_tab_record(record, existing))
+            .or_insert_with(|| record.clone());
+    }
+
+    for record in remote {
+        if local.iter().any(|local_record| local_record.id == record.id) || record.deleted_at.is_some() {
+            continue;
+        }
+
+        if !last_sync_at.is_empty() && compare_sync_stamps(&sync_tab_version_stamp(record), last_sync_at).is_le() {
+            merged.insert(record.id.clone(), tombstone_tab_record(record, now));
+        }
+    }
+
+    let mut records: Vec<SyncTabRecord> = merged.into_values().collect();
+    records.sort_by_key(|record| record.order);
+    records
+}
+
+fn merge_task_records(
+    local: &[SyncTaskRecord],
+    remote: &[SyncTaskRecord],
+    last_sync_at: &str,
+    now: &str,
+) -> Vec<SyncTaskRecord> {
+    let mut merged = std::collections::BTreeMap::new();
+
+    for record in remote {
+        merged.insert(record.id.clone(), record.clone());
+    }
+
+    for record in local {
+        merged
+            .entry(record.id.clone())
+            .and_modify(|existing| *existing = pick_task_record(record, existing))
+            .or_insert_with(|| record.clone());
+    }
+
+    for record in remote {
+        if local.iter().any(|local_record| local_record.id == record.id) || record.deleted_at.is_some() {
+            continue;
+        }
+
+        if !last_sync_at.is_empty() && compare_sync_stamps(&sync_task_version_stamp(record), last_sync_at).is_le() {
+            merged.insert(record.id.clone(), tombstone_task_record(record, now));
+        }
+    }
+
+    let mut records: Vec<SyncTaskRecord> = merged.into_values().collect();
+    records.sort_by(|left, right| {
+        let left_key = match left.status {
+            SyncTaskStatus::Active => 0,
+            SyncTaskStatus::Completed => 1,
+            SyncTaskStatus::Deleted => 2,
+        };
+        let right_key = match right.status {
+            SyncTaskStatus::Active => 0,
+            SyncTaskStatus::Completed => 1,
+            SyncTaskStatus::Deleted => 2,
+        };
+        left_key.cmp(&right_key).then(left.order.cmp(&right.order))
+    });
+    records
+}
+
+fn merge_preferences(
+    local: &SyncPreferences,
+    remote: &SyncPreferences,
+    last_sync_at: &str,
+) -> SyncPreferences {
+    if local.updated_at.trim().is_empty() && !remote.updated_at.trim().is_empty() {
+        return remote.clone();
+    }
+
+    if remote.updated_at.trim().is_empty() && !local.updated_at.trim().is_empty() {
+        return local.clone();
+    }
+
+    if local.updated_at.trim().is_empty() && remote.updated_at.trim().is_empty() {
+        return if !last_sync_at.is_empty() { local.clone() } else { remote.clone() };
+    }
+
+    match compare_sync_stamps(&local.updated_at, &remote.updated_at) {
+        std::cmp::Ordering::Greater => local.clone(),
+        std::cmp::Ordering::Less => remote.clone(),
+        std::cmp::Ordering::Equal => local.clone(),
+    }
+}
+
+fn pick_tab_record(local: &SyncTabRecord, remote: &SyncTabRecord) -> SyncTabRecord {
+    match compare_sync_stamps(&sync_tab_version_stamp(local), &sync_tab_version_stamp(remote)) {
+        std::cmp::Ordering::Greater => local.clone(),
+        std::cmp::Ordering::Less => remote.clone(),
+        std::cmp::Ordering::Equal => {
+            if local.deleted_at.is_some() && remote.deleted_at.is_none() {
+                local.clone()
+            } else {
+                remote.clone()
+            }
+        }
+    }
+}
+
+fn pick_task_record(local: &SyncTaskRecord, remote: &SyncTaskRecord) -> SyncTaskRecord {
+    match compare_sync_stamps(&sync_task_version_stamp(local), &sync_task_version_stamp(remote)) {
+        std::cmp::Ordering::Greater => local.clone(),
+        std::cmp::Ordering::Less => remote.clone(),
+        std::cmp::Ordering::Equal => {
+            if local.deleted_at.is_some() && remote.deleted_at.is_none() {
+                local.clone()
+            } else {
+                remote.clone()
+            }
+        }
+    }
+}
+
+fn tombstone_tab_record(source: &SyncTabRecord, now: &str) -> SyncTabRecord {
+    let mut record = source.clone();
+    record.updated_at = now.to_string();
+    record.deleted_at = Some(now.to_string());
+    record
+}
+
+fn tombstone_task_record(source: &SyncTaskRecord, now: &str) -> SyncTaskRecord {
+    let mut record = source.clone();
+    record.status = SyncTaskStatus::Deleted;
+    record.current = false;
+    record.updated_at = now.to_string();
+    record.deleted_at = Some(now.to_string());
+    record
+}
+
+fn compare_sync_stamps(left: &str, right: &str) -> std::cmp::Ordering {
+    match (parse_sync_stamp(left), parse_sync_stamp(right)) {
+        (Some(left), Some(right)) => left.cmp(&right),
+        _ => left.trim().cmp(right.trim()),
+    }
+}
+
+fn parse_sync_stamp(value: &str) -> Option<DateTime<Utc>> {
+    let value = value.trim();
+    if value.is_empty() {
+        return None;
+    }
+
+    DateTime::parse_from_rfc3339(value)
+        .map(|value| value.with_timezone(&Utc))
+        .ok()
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -459,7 +764,10 @@ mod tests {
         let mut data = AppData::with_default_items("2026-04-05 12:00");
         data.settings.sync.enabled = true;
         data.settings.sync.device_id = "desktop-win11".into();
+        data.settings.sync.last_sync_at = "2026-04-05T12:00:00Z".into();
+        data.settings.preferences_updated_at = "2026-04-05T12:00:00Z".into();
         data.active[0].sync_id = "tsk_01".into();
+        data.active[0].sync_updated_at = "2026-04-05T12:10:00Z".into();
         data.active[0].tab = "General".into();
         data.active[0].current = true;
         data.active[0].due_date = "2026-04-08 09:30".into();
@@ -472,8 +780,65 @@ mod tests {
         assert_eq!(sync.shared.tasks[0].id, "tsk_01");
         assert_eq!(restored.active.len(), data.active.len());
         assert_eq!(restored.active[0].sync_id, "tsk_01");
+        assert_eq!(restored.active[0].sync_updated_at, "2026-04-05T12:10:00Z");
         assert_eq!(restored.active[0].tab, "General");
         assert!(restored.settings.sync.enabled);
         assert_eq!(restored.settings.sync.device_id, "desktop-win11");
+    }
+
+    #[test]
+    fn merge_prefers_newer_remote_task_updates() {
+        let mut local = SyncFile::default();
+        local.shared.tasks.push(SyncTaskRecord {
+            id: "task-1".into(),
+            text: "Local title".into(),
+            status: SyncTaskStatus::Active,
+            tab_id: "general".into(),
+            current: false,
+            order: 0,
+            created_at: "2026-04-05T12:00:00Z".into(),
+            updated_at: "2026-04-05T12:05:00Z".into(),
+            completed_at: None,
+            deleted_at: None,
+            extra_info: String::new(),
+            due_date: None,
+        });
+        local.shared.preferences.updated_at = "2026-04-05T12:05:00Z".into();
+        local.updated_at = "2026-04-05T12:05:00Z".into();
+
+        let mut remote = local.clone();
+        remote.shared.tasks[0].text = "Remote title".into();
+        remote.shared.tasks[0].updated_at = "2026-04-05T12:10:00Z".into();
+        remote.updated_at = "2026-04-05T12:10:00Z".into();
+
+        let merged = merge_sync_files(&local, &remote, "2026-04-05T12:00:00Z", "desktop");
+        assert_eq!(merged.shared.tasks.len(), 1);
+        assert_eq!(merged.shared.tasks[0].text, "Remote title");
+    }
+
+    #[test]
+    fn merge_marks_missing_local_records_as_deleted_when_remote_is_old() {
+        let local = SyncFile::default();
+        let mut remote = SyncFile::default();
+        remote.shared.tasks.push(SyncTaskRecord {
+            id: "task-1".into(),
+            text: "Old remote task".into(),
+            status: SyncTaskStatus::Active,
+            tab_id: "general".into(),
+            current: false,
+            order: 0,
+            created_at: "2026-04-05T12:00:00Z".into(),
+            updated_at: "2026-04-05T12:01:00Z".into(),
+            completed_at: None,
+            deleted_at: None,
+            extra_info: String::new(),
+            due_date: None,
+        });
+        remote.updated_at = "2026-04-05T12:01:00Z".into();
+
+        let merged = merge_sync_files(&local, &remote, "2026-04-05T12:03:00Z", "desktop");
+        assert_eq!(merged.shared.tasks.len(), 1);
+        assert_eq!(merged.shared.tasks[0].status, SyncTaskStatus::Deleted);
+        assert!(merged.shared.tasks[0].deleted_at.is_some());
     }
 }

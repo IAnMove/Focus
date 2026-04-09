@@ -141,6 +141,31 @@ impl AppState {
         self.startup_message = message.into();
     }
 
+    fn touch_all_active_tasks(&mut self) {
+        let stamp = storage::now_sync_stamp();
+        for task in &mut self.data.active {
+            task.sync_updated_at = stamp.clone();
+        }
+    }
+
+    fn touch_tab(&mut self, name: &str) {
+        let stamp = storage::now_sync_stamp();
+        if let Some(tab) = self.data.settings.tabs.iter_mut().find(|tab| tab.name == name) {
+            tab.sync_updated_at = stamp;
+        }
+    }
+
+    fn touch_all_tabs(&mut self) {
+        let stamp = storage::now_sync_stamp();
+        for tab in &mut self.data.settings.tabs {
+            tab.sync_updated_at = stamp.clone();
+        }
+    }
+
+    fn touch_preferences(&mut self) {
+        self.data.settings.preferences_updated_at = storage::now_sync_stamp();
+    }
+
     fn push_sync_if_enabled(&mut self) {
         if !self.sync_enabled {
             return;
@@ -159,13 +184,34 @@ impl AppState {
         }
 
         let path = PathBuf::from(path);
-        let sync_file = storage::app_data_to_sync_file(&self.data, device_id);
-        match storage::save_sync_file_to_path(&path, &sync_file) {
+        let local_sync = storage::app_data_to_sync_file(&self.data, device_id);
+        let merged_sync = match storage::load_sync_file_from_path(&path) {
+            Ok(remote_sync) => storage::merge_sync_files(
+                &local_sync,
+                &remote_sync,
+                &self.data.settings.sync.last_sync_at,
+                device_id,
+            ),
+            Err(error) if error.kind() == std::io::ErrorKind::NotFound => local_sync,
+            Err(error) => {
+                self.set_sync_message(format!("Sync failed: {}", error));
+                return;
+            }
+        };
+
+        match storage::save_sync_file_to_path(&path, &merged_sync) {
             Ok(()) => {
-                self.data.settings.sync.enabled = true;
-                self.data.settings.sync.path = self.sync_path.clone();
-                self.data.settings.sync.device_id = self.sync_device_id.clone();
-                self.data.settings.sync.last_sync_at = storage::now_sync_stamp();
+                let mut local_settings = self.data.settings.clone();
+                local_settings.sync.enabled = true;
+                local_settings.sync.path = self.sync_path.clone();
+                local_settings.sync.device_id = self.sync_device_id.clone();
+                local_settings.sync.last_sync_at = storage::now_sync_stamp();
+                let sync_config = local_settings.sync.clone();
+                self.data = storage::sync_file_to_app_data(&merged_sync, Some(&local_settings));
+                self.data.settings.sync = sync_config;
+                if let Some(store) = &self.store {
+                    let _ = store.save(&self.data);
+                }
                 self.set_sync_message(format!("Synced to {}", path.display()));
             }
             Err(error) => {
@@ -200,12 +246,14 @@ impl AppState {
                 task.text = text.to_string();
                 task.extra_info = self.draft_extra.trim().to_string();
                 task.due_date = due_date;
+                task.sync_updated_at = storage::now_sync_stamp();
             }
         } else {
             let mut item = model::TaskItem::new(self.data.next_id(), text);
             item.created_at = storage::now_stamp();
             item.extra_info = self.draft_extra.trim().to_string();
             item.due_date = due_date;
+            item.sync_updated_at = storage::now_sync_stamp();
             item.tab = if self.active_tab == "All" {
                 model::GENERAL_TAB_NAME.to_string()
             } else {
@@ -242,6 +290,7 @@ impl AppState {
             if self.editing_task_id == Some(task_id) {
                 self.clear_draft();
             }
+            self.touch_all_active_tasks();
             self.open_task_menu_id = None;
             self.save();
         }
@@ -265,8 +314,13 @@ impl AppState {
         }
 
         if should_promote {
+            let stamp = storage::now_sync_stamp();
             for task in &mut self.data.active {
-                task.current = task.id == task_id;
+                let next = task.id == task_id;
+                if task.current != next {
+                    task.current = next;
+                    task.sync_updated_at = stamp.clone();
+                }
             }
             if let Some(index) = self.data.active.iter().position(|task| task.id == task_id) {
                 let task = self.data.active.remove(index);
@@ -274,8 +328,10 @@ impl AppState {
             }
         } else if let Some(task) = self.data.active.iter_mut().find(|task| task.id == task_id) {
             task.current = false;
+            task.sync_updated_at = storage::now_sync_stamp();
         }
 
+        self.touch_all_active_tasks();
         self.open_task_menu_id = None;
         self.save();
         true
@@ -303,7 +359,9 @@ impl AppState {
         item.done = true;
         item.current = false;
         item.completed_at = storage::now_stamp();
+        item.sync_updated_at = storage::now_sync_stamp();
         self.undo_item = Some(item);
+        self.touch_all_active_tasks();
         self.open_task_menu_id = None;
 
         if self.editing_task_id == Some(task_id) {
@@ -321,8 +379,10 @@ impl AppState {
 
         item.done = false;
         item.completed_at.clear();
+        item.sync_updated_at = storage::now_sync_stamp();
         self.data.active.insert(0, item);
         self.open_task_menu_id = None;
+        self.touch_all_active_tasks();
         self.save();
         true
     }
@@ -439,8 +499,10 @@ impl AppState {
         item.done = false;
         item.current = false;
         item.completed_at.clear();
+        item.sync_updated_at = storage::now_sync_stamp();
         self.data.active.push(item);
         self.history_visible = false;
+        self.touch_all_active_tasks();
         self.save();
         true
     }
@@ -456,6 +518,7 @@ impl AppState {
         }
 
         self.data.active.swap(index, target as usize);
+        self.touch_all_active_tasks();
         self.open_task_menu_id = None;
         self.save();
         true
@@ -477,6 +540,7 @@ impl AppState {
             .unwrap_or(0);
         let next_index = (current_index + 1) % tabs.len();
         task.tab = tabs[next_index].name.clone();
+        task.sync_updated_at = storage::now_sync_stamp();
         self.open_task_menu_id = None;
         self.save();
         true
@@ -490,6 +554,7 @@ impl AppState {
 
         self.data.settings.tabs.push(model::TabSpec {
             sync_id: model::tab_sync_id_from_name(&name),
+            sync_updated_at: storage::now_sync_stamp(),
             name: name.clone(),
             priority: model::TabPriority::Normal,
         });
@@ -517,6 +582,7 @@ impl AppState {
         }
 
         self.data.settings.tabs.swap(index, target as usize);
+        self.touch_all_tabs();
         self.save();
         true
     }
@@ -540,6 +606,7 @@ impl AppState {
         {
             if task.tab == name {
                 task.tab = model::GENERAL_TAB_NAME.to_string();
+                task.sync_updated_at = storage::now_sync_stamp();
             }
         }
 
@@ -548,6 +615,8 @@ impl AppState {
         }
 
         self.clamp_tab_window();
+        self.touch_all_tabs();
+        self.touch_tab(model::GENERAL_TAB_NAME);
         self.save();
         true
     }
@@ -624,13 +693,31 @@ impl AppState {
                 local_settings.sync.enabled = self.sync_enabled;
                 local_settings.sync.path = path.clone();
                 local_settings.sync.device_id = self.sync_device_id.trim().to_string();
-                local_settings.sync.last_sync_at = storage::now_sync_stamp();
+                let local_sync = storage::app_data_to_sync_file(&self.data, self.sync_device_id.trim());
+                let merged_sync = storage::merge_sync_files(
+                    &local_sync,
+                    &sync_file,
+                    &self.data.settings.sync.last_sync_at,
+                    self.sync_device_id.trim(),
+                );
+                let sync_stamp = storage::now_sync_stamp();
+                local_settings.sync.last_sync_at = sync_stamp.clone();
 
-                self.data = storage::sync_file_to_app_data(&sync_file, Some(&local_settings));
+                if let Err(error) = storage::save_sync_file_to_path(&sync_path, &merged_sync) {
+                    self.set_sync_message(format!("Sync failed: {}", error));
+                    return false;
+                }
+
+                self.data = storage::sync_file_to_app_data(&merged_sync, Some(&local_settings));
                 self.data.settings.sync = local_settings.sync.clone();
                 self.active_tab = "All".to_string();
                 self.clear_draft();
-                self.save();
+                if let Some(store) = &self.store {
+                    if let Err(error) = store.save(&self.data) {
+                        self.set_sync_message(format!("Sync failed: {}", error));
+                        return false;
+                    }
+                }
                 self.set_sync_message(format!("Synced from {}", path));
                 true
             }
@@ -646,6 +733,7 @@ impl AppState {
         match normalized.as_str() {
             "warm" | "forest" | "ocean" | "rose" | "dark" => {
                 self.data.settings.theme_name = normalized.clone();
+                self.touch_preferences();
                 self.save();
                 self.set_tools_message(format!("Applied theme preset {}", normalized));
                 true
@@ -661,6 +749,7 @@ impl AppState {
         }
 
         self.data.settings.font_scale = (next * 10.0).round() / 10.0;
+        self.touch_preferences();
         self.save();
         self.set_tools_message(format!(
             "Font scale set to {}%",
@@ -671,6 +760,7 @@ impl AppState {
 
     fn toggle_accessibility_mode(&mut self) -> bool {
         self.data.settings.accessibility_mode = !self.data.settings.accessibility_mode;
+        self.touch_preferences();
         self.save();
         self.set_tools_message(if self.data.settings.accessibility_mode {
             "Accessibility mode enabled"
@@ -682,6 +772,7 @@ impl AppState {
 
     fn toggle_item_meta(&mut self) -> bool {
         self.data.settings.show_item_meta = !self.data.settings.show_item_meta;
+        self.touch_preferences();
         self.save();
         self.set_tools_message(if self.data.settings.show_item_meta {
             "Task metadata visible"

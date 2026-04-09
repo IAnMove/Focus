@@ -92,7 +92,7 @@ Portar la aplicacion actual de checklist en Python a Rust usando Slint, mantenie
 - [x] 29. Implementar lectura y escritura de `focus-sync.json` usando el archivo local como cache interna.
 - [x] 30. Anadir en `Tools` la configuracion opcional de sync externo y el boton manual `Sync` para descargar/recargar desde la fuente de verdad.
 - [x] 31. Propagar de forma proactiva cada cambio local al archivo de sync cuando la opcion este activada.
-- [ ] 32. Implementar merge basico entre cache local y archivo externo con prioridad por `updated_at` y soporte de `deleted_at`.
+- [x] 32. Implementar merge basico entre cache local y archivo externo con prioridad por `updated_at` y soporte de `deleted_at`.
 - [ ] 33. Documentar para Android el contrato de lectura/escritura y las reglas minimas de compatibilidad.
 
 ## Criterios de migracion
@@ -103,4 +103,4 @@ Portar la aplicacion actual de checklist en Python a Rust usando Slint, mantenie
 - Hacer un commit por cada tarea completada.
 
 ## Siguiente paso
-Tarea 32: implementar merge basico entre cache local y archivo externo con prioridad por `updated_at` y soporte de `deleted_at`.
+Tarea 33: documentar para Android el contrato de lectura/escritura y las reglas minimas de compatibilidad.
