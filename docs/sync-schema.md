@@ -64,7 +64,8 @@ el boton `Sync` forzara una recarga desde ese archivo.
       "custom_palette": {},
       "font_scale": 1.0,
       "accessibility_mode": false,
-      "show_item_meta": true
+      "show_item_meta": true,
+      "updated_at": "2026-04-07T20:41:12Z"
     }
   }
 }
@@ -105,6 +106,7 @@ Se sincronizan solo los ajustes que deben verse igual en ambos clientes:
 - `font_scale`
 - `accessibility_mode`
 - `show_item_meta`
+- `updated_at`
 
 No se sincronizan:
 
@@ -118,13 +120,17 @@ No se sincronizan:
 
 Version minima:
 
-- Cada entidad se compara por `updated_at`.
+- Cada tab o task se compara por una "version efectiva".
+- La version efectiva es `deleted_at` si existe; si no, `updated_at`.
 - Gana la version mas reciente.
 - Si `deleted_at` no es `null`, la entidad se considera borrada aunque siga
   presente en el archivo.
 - Si una tarea apunta a una tab borrada, debe reasignarse a `General`.
 - Solo una tarea activa deberia quedar con `current = true`; si hay varias,
   gana la de `updated_at` mas reciente.
+- `shared.preferences` se compara por `preferences.updated_at`.
+- Si un registro remoto falta en local pero su version remota es anterior o
+  igual a `last_sync_at`, puede convertirse en tombstone local al hacer merge.
 
 ## Relacion con la cache local
 
@@ -139,6 +145,11 @@ Si el sync externo esta activado:
 4. Tras cada accion del usuario, escribe cache local y archivo externo.
 
 El boton `Sync` debe forzar una recarga desde el archivo externo.
+
+## Referencia para Android
+
+La guia operativa para la app Android esta en
+[docs/android-sync.md](./android-sync.md).
 
 ## Compatibilidad con el formato actual
 

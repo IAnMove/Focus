@@ -93,7 +93,7 @@ Portar la aplicacion actual de checklist en Python a Rust usando Slint, mantenie
 - [x] 30. Anadir en `Tools` la configuracion opcional de sync externo y el boton manual `Sync` para descargar/recargar desde la fuente de verdad.
 - [x] 31. Propagar de forma proactiva cada cambio local al archivo de sync cuando la opcion este activada.
 - [x] 32. Implementar merge basico entre cache local y archivo externo con prioridad por `updated_at` y soporte de `deleted_at`.
-- [ ] 33. Documentar para Android el contrato de lectura/escritura y las reglas minimas de compatibilidad.
+- [x] 33. Documentar para Android el contrato de lectura/escritura y las reglas minimas de compatibilidad.
 
 ## Criterios de migracion
 - Mantener compatibilidad con Windows, macOS y Linux.
@@ -103,4 +103,4 @@ Portar la aplicacion actual de checklist en Python a Rust usando Slint, mantenie
 - Hacer un commit por cada tarea completada.
 
 ## Siguiente paso
-Tarea 33: documentar para Android el contrato de lectura/escritura y las reglas minimas de compatibilidad.
+Sin tareas pendientes en `tasks.md`. Los siguientes pasos ya son ajustes o nuevas funcionalidades fuera del backlog actual.
