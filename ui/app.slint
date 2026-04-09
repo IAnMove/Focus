@@ -458,9 +458,11 @@ component TaskCard inherits Rectangle {
     border-width: 1px;
     border-color: task.is_current ? accent : border;
     background: task.is_current ? panel-alt : panel;
-    min-height: task.has_extra
-        ? (accessibility-mode ? 172px : 156px)
-        : (accessibility-mode ? 148px : 132px);
+    min-height:
+        (accessibility-mode ? 68px : 60px)
+        + (task.has_due_date ? (accessibility-mode ? 44px : 38px) : 0px)
+        + (task.has_extra ? (accessibility-mode ? 28px : 24px) : 0px)
+        + (task.has_link ? (accessibility-mode ? 44px : 38px) : 0px);
 
     VerticalLayout {
         padding: 14px;
@@ -486,10 +488,7 @@ component TaskCard inherits Rectangle {
                 spacing: 4px;
                 horizontal-stretch: 1;
 
-                if (task.meta == "") : Rectangle {
-                    background: transparent;
-                    vertical-stretch: 1;
-                }
+                if (task.meta == "") : Rectangle { background: transparent; height: 2px; }
 
                 Text {
                     text: task.title;
@@ -506,10 +505,7 @@ component TaskCard inherits Rectangle {
                     wrap: word-wrap;
                 }
 
-                if (task.meta == "") : Rectangle {
-                    background: transparent;
-                    vertical-stretch: 1;
-                }
+                if (task.meta == "") : Rectangle { background: transparent; height: 2px; }
             }
 
             if (root.menu-open) : Rectangle {
@@ -1368,6 +1364,7 @@ export component AppWindow inherits Window {
                 }
 
                 HorizontalLayout {
+                    height: root.accessibility-mode ? 40px : 34px;
                     spacing: 8px;
 
                     AppButton {
@@ -1479,12 +1476,14 @@ export component AppWindow inherits Window {
                         text-muted: root.text-muted;
                         font-scale: root.font-scale;
                         accessibility-mode: root.accessibility-mode;
+                        width: root.accessibility-mode ? 40px : 34px;
+                        height: root.accessibility-mode ? 40px : 34px;
                         pressed => { root.shift-tabs-left(); }
                     }
 
                     Rectangle {
                         horizontal-stretch: 1;
-                        height: 34px;
+                        height: root.accessibility-mode ? 40px : 34px;
                         background: transparent;
 
                         changed width => {
@@ -1521,6 +1520,8 @@ export component AppWindow inherits Window {
                         text-muted: root.text-muted;
                         font-scale: root.font-scale;
                         accessibility-mode: root.accessibility-mode;
+                        width: root.accessibility-mode ? 40px : 34px;
+                        height: root.accessibility-mode ? 40px : 34px;
                         pressed => { root.shift-tabs-right(); }
                     }
                 }
