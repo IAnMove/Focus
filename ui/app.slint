@@ -1138,6 +1138,8 @@ export component AppWindow inherits Window {
     in-out property <string> sync-provider: "local_file";
     in-out property <string> sync-path: "";
     in-out property <string> sync-device-id: "";
+    in-out property <string> sync-google-client-id: "";
+    in-out property <string> sync-google-file-id: "";
     in-out property <string> sync-message: "";
     in-out property <bool> startup-enabled: false;
     in-out property <string> startup-message: "";
@@ -1995,7 +1997,7 @@ export component AppWindow inherits Window {
                             border-width: 1px;
                             border-color: root.border;
                             background: root.panel-soft;
-                            min-height: 236px;
+                            min-height: root.sync-provider == "google_drive" ? 304px : 236px;
 
                             VerticalLayout {
                                 padding: 14px;
@@ -2059,16 +2061,28 @@ export component AppWindow inherits Window {
                                     border-width: 1px;
                                     border-color: root.border;
                                     background: root.panel;
-                                    min-height: 62px;
+                                    min-height: 124px;
 
-                                    Text {
-                                        x: 10px;
-                                        y: 10px;
-                                        width: parent.width - 20px;
-                                        text: "Provider selected: Google Drive. OAuth desktop flow and shared file selection are the next step.";
-                                        color: root.text-muted;
-                                        wrap: word-wrap;
-                                        font-size: root.font-body;
+                                    VerticalLayout {
+                                        padding: 10px;
+                                        spacing: 8px;
+
+                                        Text {
+                                            text: "Provider selected: Google Drive. Store the desktop client_id and the shared file_id here; OAuth desktop transport is the next step.";
+                                            color: root.text-muted;
+                                            wrap: word-wrap;
+                                            font-size: root.font-body;
+                                        }
+
+                                        LineEdit {
+                                            text <=> root.sync-google-client-id;
+                                            placeholder-text: "Desktop OAuth client_id";
+                                        }
+
+                                        LineEdit {
+                                            text <=> root.sync-google-file-id;
+                                            placeholder-text: "Shared Drive file_id";
+                                        }
                                     }
                                 }
 

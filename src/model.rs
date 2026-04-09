@@ -253,6 +253,10 @@ pub struct SyncConfig {
     #[serde(default)]
     pub device_id: String,
     #[serde(default)]
+    pub google_drive_client_id: String,
+    #[serde(default)]
+    pub google_drive_file_id: String,
+    #[serde(default)]
     pub last_sync_at: String,
 }
 
@@ -260,6 +264,8 @@ impl SyncConfig {
     pub fn normalized(mut self) -> Self {
         self.path = self.path.trim().to_string();
         self.device_id = self.device_id.trim().to_string();
+        self.google_drive_client_id = self.google_drive_client_id.trim().to_string();
+        self.google_drive_file_id = self.google_drive_file_id.trim().to_string();
         self.last_sync_at = self.last_sync_at.trim().to_string();
         self
     }
@@ -747,6 +753,8 @@ mod tests {
             provider: SyncProvider::LocalFile,
             path: "  C:/sync/focus-sync.json  ".into(),
             device_id: "  desktop-win11  ".into(),
+            google_drive_client_id: "  desktop-client-id.apps.googleusercontent.com  ".into(),
+            google_drive_file_id: "  1abCDefGhIJklmnOP  ".into(),
             last_sync_at: "  2026-04-07T20:41:12Z ".into(),
         }
         .normalized();
@@ -755,6 +763,11 @@ mod tests {
         assert_eq!(config.provider, SyncProvider::LocalFile);
         assert_eq!(config.path, "C:/sync/focus-sync.json");
         assert_eq!(config.device_id, "desktop-win11");
+        assert_eq!(
+            config.google_drive_client_id,
+            "desktop-client-id.apps.googleusercontent.com"
+        );
+        assert_eq!(config.google_drive_file_id, "1abCDefGhIJklmnOP");
         assert_eq!(config.last_sync_at, "2026-04-07T20:41:12Z");
     }
 

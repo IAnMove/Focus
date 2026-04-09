@@ -29,7 +29,9 @@ La paridad de UX/UI ya cubre la mayor parte del flujo diario: lista principal, `
 - Importacion y exportacion JSON por ruta.
 - `About` con version, commit y enlace del proyecto.
 - Inicio con el sistema en Windows y Linux.
-- Sync externo opcional con `focus-sync.json` y recarga manual desde `Tools`.
+- Sync externo opcional con `focus-sync.json`, merge bidireccional y recarga manual desde `Tools`.
+- Seleccion de proveedor de sync: `local_file` o `google_drive`.
+- Configuracion inicial de Google Drive en `Tools` con `client_id` y `file_id`.
 - Persistencia de `active`, `history` y `settings`.
 
 ## Diferencias respecto a focus.py
@@ -37,22 +39,24 @@ La paridad de UX/UI ya cubre la mayor parte del flujo diario: lista principal, `
 Estas partes del script original o del roadmap de sync todavia no estan cerradas:
 
 - Editor de tema personalizado completo.
-- Sync proactivo al archivo externo despues de cada cambio local.
-- Merge entre cache local y archivo externo por `updated_at` / `deleted_at`.
-- Documentacion especifica del contrato Android para sync bidireccional.
+- Transporte OAuth real para Google Drive en escritorio.
+- Persistencia segura de tokens de Google Drive.
 
 ## Sync externo
 
-La app ya soporta una fuente externa opcional `focus-sync.json`:
+La app ya soporta una fuente externa opcional `focus-sync.json` y dos modos de
+proveedor:
 
 - cache local: `checklist.json`
-- fuente compartida opcional: `focus-sync.json`
+- proveedor `local_file`: ruta directa a `focus-sync.json`
+- proveedor `google_drive`: configuracion local de `client_id` + `file_id`
 - accion manual disponible: `Sync now`
 
-Pendiente:
+Estado actual:
 
-- subida proactiva de cambios locales
-- merge automatico entre cache y fuente externa
+- `local_file` ya hace push proactivo y merge por `updated_at` / `deleted_at`
+- `google_drive` ya tiene configuracion persistida en `Tools`
+- el transporte OAuth de Google Drive sigue pendiente
 
 ## Ejecutar
 
@@ -91,6 +95,7 @@ Las dependencias clave estan documentadas en [Cargo.toml](/i:/focus/Cargo.toml):
 - [src/audio.rs](/i:/focus/src/audio.rs): sonidos base por plataforma.
 - [ui/app.slint](/i:/focus/ui/app.slint): interfaz Slint.
 - [docs/sync-schema.md](/i:/focus/docs/sync-schema.md): contrato compartido de `focus-sync.json`.
+- [docs/google-drive-setup.md](/i:/focus/docs/google-drive-setup.md): configuracion prevista para Google Drive.
 
 ## Datos
 

@@ -151,6 +151,9 @@ El boton `Sync` debe forzar una recarga desde el archivo externo.
 La guia operativa para la app Android esta en
 [docs/android-sync.md](./android-sync.md).
 
+La guia de preparacion para Google Drive en escritorio esta en
+[docs/google-drive-setup.md](./google-drive-setup.md).
+
 ## Compatibilidad con el formato actual
 
 El archivo local actual separa:

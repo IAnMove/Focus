@@ -41,6 +41,8 @@ struct AppState {
     sync_provider: model::SyncProvider,
     sync_path: String,
     sync_device_id: String,
+    sync_google_client_id: String,
+    sync_google_file_id: String,
     sync_message: String,
     startup_enabled: bool,
     startup_message: String,
@@ -69,6 +71,8 @@ impl AppState {
         let sync_provider = data.settings.sync.provider;
         let sync_path = data.settings.sync.path.clone();
         let sync_device_id = data.settings.sync.device_id.clone();
+        let sync_google_client_id = data.settings.sync.google_drive_client_id.clone();
+        let sync_google_file_id = data.settings.sync.google_drive_file_id.clone();
         let startup_enabled = storage::startup_enabled().unwrap_or(false);
 
         Self {
@@ -91,6 +95,8 @@ impl AppState {
             sync_provider,
             sync_path,
             sync_device_id,
+            sync_google_client_id,
+            sync_google_file_id,
             sync_message: String::new(),
             startup_enabled,
             startup_message: String::new(),
@@ -140,6 +146,27 @@ impl AppState {
         self.sync_message = message.into();
     }
 
+    fn google_drive_sync_hint(&self, action: &str) -> String {
+        let has_client_id = !self.sync_google_client_id.trim().is_empty();
+        let has_file_id = !self.sync_google_file_id.trim().is_empty();
+
+        match (has_client_id, has_file_id) {
+            (false, false) => format!(
+                "Google Drive provider selected for {action}. Add client_id and file_id in Tools before enabling OAuth transport."
+            ),
+            (false, true) => format!(
+                "Google Drive provider selected for {action}. Add the desktop client_id in Tools before enabling OAuth transport."
+            ),
+            (true, false) => format!(
+                "Google Drive provider selected for {action}. Add the shared Drive file_id in Tools before enabling OAuth transport."
+            ),
+            (true, true) => format!(
+                "Google Drive provider configured for {action} (file_id: {}). OAuth transport is still pending.",
+                self.sync_google_file_id.trim()
+            ),
+        }
+    }
+
     fn set_startup_message(&mut self, message: impl Into<String>) {
         self.startup_message = message.into();
     }
@@ -175,9 +202,7 @@ impl AppState {
         }
 
         if self.sync_provider == model::SyncProvider::GoogleDrive {
-            self.set_sync_message(
-                "Google Drive provider selected. OAuth transport is the next step; local file sync is unchanged.",
-            );
+            self.set_sync_message(self.google_drive_sync_hint("background sync"));
             return;
         }
 
@@ -216,6 +241,8 @@ impl AppState {
                 local_settings.sync.provider = self.sync_provider;
                 local_settings.sync.path = self.sync_path.clone();
                 local_settings.sync.device_id = self.sync_device_id.clone();
+                local_settings.sync.google_drive_client_id = self.sync_google_client_id.clone();
+                local_settings.sync.google_drive_file_id = self.sync_google_file_id.clone();
                 local_settings.sync.last_sync_at = storage::now_sync_stamp();
                 let sync_config = local_settings.sync.clone();
                 self.data = storage::sync_file_to_app_data(&merged_sync, Some(&local_settings));
@@ -681,8 +708,14 @@ impl AppState {
         self.data.settings.sync.provider = self.sync_provider;
         self.data.settings.sync.path = self.sync_path.trim().to_string();
         self.data.settings.sync.device_id = self.sync_device_id.trim().to_string();
+        self.data.settings.sync.google_drive_client_id = self.sync_google_client_id.trim().to_string();
+        self.data.settings.sync.google_drive_file_id = self.sync_google_file_id.trim().to_string();
         self.save();
-        self.set_sync_message("Sync settings saved locally.");
+        if self.sync_provider == model::SyncProvider::GoogleDrive {
+            self.set_sync_message(self.google_drive_sync_hint("config save"));
+        } else {
+            self.set_sync_message("Sync settings saved locally.");
+        }
         true
     }
 
@@ -693,9 +726,7 @@ impl AppState {
         }
 
         if self.sync_provider == model::SyncProvider::GoogleDrive {
-            self.set_sync_message(
-                "Google Drive provider selected. OAuth transport is not wired yet; keep using local file for active sync.",
-            );
+            self.set_sync_message(self.google_drive_sync_hint("manual sync"));
             return false;
         }
 
@@ -713,6 +744,8 @@ impl AppState {
                 local_settings.sync.provider = self.sync_provider;
                 local_settings.sync.path = path.clone();
                 local_settings.sync.device_id = self.sync_device_id.trim().to_string();
+                local_settings.sync.google_drive_client_id = self.sync_google_client_id.trim().to_string();
+                local_settings.sync.google_drive_file_id = self.sync_google_file_id.trim().to_string();
                 let local_sync = storage::app_data_to_sync_file(&self.data, self.sync_device_id.trim());
                 let merged_sync = storage::merge_sync_files(
                     &local_sync,
@@ -1264,6 +1297,8 @@ fn bind_callbacks(app: &AppWindow, state: Rc<RefCell<AppState>>, undo_timer: Rc<
                 state.sync_provider = model::SyncProvider::from_str(app.get_sync_provider().as_str());
                 state.sync_path = app.get_sync_path().to_string();
                 state.sync_device_id = app.get_sync_device_id().to_string();
+                state.sync_google_client_id = app.get_sync_google_client_id().to_string();
+                state.sync_google_file_id = app.get_sync_google_file_id().to_string();
                 state.save_sync_config();
                 refresh_ui(&app, &state);
             }
@@ -1280,6 +1315,8 @@ fn bind_callbacks(app: &AppWindow, state: Rc<RefCell<AppState>>, undo_timer: Rc<
                 state.sync_provider = model::SyncProvider::from_str(app.get_sync_provider().as_str());
                 state.sync_path = app.get_sync_path().to_string();
                 state.sync_device_id = app.get_sync_device_id().to_string();
+                state.sync_google_client_id = app.get_sync_google_client_id().to_string();
+                state.sync_google_file_id = app.get_sync_google_file_id().to_string();
                 state.sync_now();
                 refresh_ui(&app, &state);
             }
@@ -1371,6 +1408,8 @@ fn refresh_ui(app: &AppWindow, state: &AppState) {
     app.set_sync_provider(state.sync_provider.as_str().into());
     app.set_sync_path(state.sync_path.clone().into());
     app.set_sync_device_id(state.sync_device_id.clone().into());
+    app.set_sync_google_client_id(state.sync_google_client_id.clone().into());
+    app.set_sync_google_file_id(state.sync_google_file_id.clone().into());
     app.set_sync_message(state.sync_message.clone().into());
     app.set_startup_enabled(state.startup_enabled);
     app.set_startup_message(state.startup_message.clone().into());
