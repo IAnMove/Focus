@@ -830,4 +830,137 @@ mod tests {
         assert_eq!(normalized.shared.tasks[0].status, SyncTaskStatus::Active);
         assert!(normalized.shared.tasks[0].current);
     }
+
+    #[test]
+    fn sync_provider_round_trips_strings() {
+        assert_eq!(SyncProvider::from_str("local_file"), SyncProvider::LocalFile);
+        assert_eq!(SyncProvider::from_str("google_drive"), SyncProvider::GoogleDrive);
+        assert_eq!(SyncProvider::from_str(" GOOGLE_DRIVE "), SyncProvider::GoogleDrive);
+        assert_eq!(SyncProvider::GoogleDrive.as_str(), "google_drive");
+        assert_eq!(SyncProvider::LocalFile.as_str(), "local_file");
+    }
+
+    #[test]
+    fn settings_normalization_clamps_and_filters_custom_palette() {
+        let mut custom_palette = BTreeMap::new();
+        custom_palette.insert("accent".into(), "  #ABCDEF  ".into());
+        custom_palette.insert("broken".into(), "blue".into());
+
+        let settings = Settings {
+            tabs: vec![],
+            theme_name: "   ".into(),
+            custom_palette,
+            font_scale: 4.0,
+            accessibility_mode: false,
+            show_item_meta: true,
+            tab_visible_count: 99,
+            always_on_top: true,
+            preferences_updated_at: " 2026-04-07T20:41:12Z ".into(),
+            sync: SyncConfig::default(),
+            extra: BTreeMap::new(),
+        }
+        .normalized();
+
+        assert_eq!(settings.theme_name, DEFAULT_THEME_NAME);
+        assert_eq!(settings.font_scale, 1.8);
+        assert_eq!(settings.tab_visible_count, 12);
+        assert_eq!(
+            settings.custom_palette.get("accent").map(String::as_str),
+            Some("#abcdef")
+        );
+        assert!(!settings.custom_palette.contains_key("broken"));
+        assert_eq!(settings.preferences_updated_at, "2026-04-07T20:41:12Z");
+        assert_eq!(settings.tabs[0].name, GENERAL_TAB_NAME);
+    }
+
+    #[test]
+    fn app_data_normalization_limits_history_and_preserves_next_id() {
+        let mut data = AppData::default();
+        data.active = vec![
+            TaskItem::new(5, "Keep"),
+            TaskItem::new(12, "Highest active"),
+        ];
+        data.history = (0..260)
+            .map(|index| {
+                let mut item = TaskItem::new(index + 100, format!("Done {index}"));
+                item.done = true;
+                item.completed_at = "2026-04-05 12:00".into();
+                item
+            })
+            .collect();
+
+        let normalized = data.normalized();
+
+        assert_eq!(normalized.history.len(), 250);
+        assert_eq!(normalized.next_id(), 350);
+    }
+
+    #[test]
+    fn tab_and_task_sync_ids_are_stable() {
+        assert_eq!(tab_sync_id_from_name("General"), "general");
+        assert_eq!(tab_sync_id_from_name(" Android Ideas "), "android-ideas");
+        assert_eq!(tab_sync_id_from_name("###"), "general");
+        assert_eq!(task_sync_id_from_legacy_id(42), "task-42");
+    }
+
+    #[test]
+    fn sync_shared_data_normalization_deduplicates_tabs_and_tasks() {
+        let shared = SyncSharedData {
+            tabs: vec![
+                SyncTabRecord {
+                    id: "general".into(),
+                    name: "General".into(),
+                    priority: TabPriority::Normal,
+                    order: 0,
+                    updated_at: "2026-04-07T20:41:12Z".into(),
+                    deleted_at: None,
+                },
+                SyncTabRecord {
+                    id: "general".into(),
+                    name: "Duplicate".into(),
+                    priority: TabPriority::High,
+                    order: 1,
+                    updated_at: "2026-04-07T20:42:12Z".into(),
+                    deleted_at: None,
+                },
+            ],
+            tasks: vec![
+                SyncTaskRecord {
+                    id: "task-1".into(),
+                    text: "One".into(),
+                    status: SyncTaskStatus::Active,
+                    tab_id: "general".into(),
+                    current: false,
+                    order: 0,
+                    created_at: "2026-04-07T20:10:00Z".into(),
+                    updated_at: "2026-04-07T20:41:12Z".into(),
+                    completed_at: None,
+                    deleted_at: None,
+                    extra_info: String::new(),
+                    due_date: None,
+                },
+                SyncTaskRecord {
+                    id: "task-1".into(),
+                    text: "Duplicate".into(),
+                    status: SyncTaskStatus::Completed,
+                    tab_id: "general".into(),
+                    current: false,
+                    order: 1,
+                    created_at: "2026-04-07T20:10:00Z".into(),
+                    updated_at: "2026-04-07T20:42:12Z".into(),
+                    completed_at: Some("2026-04-07T20:42:12Z".into()),
+                    deleted_at: None,
+                    extra_info: String::new(),
+                    due_date: None,
+                },
+            ],
+            preferences: SyncPreferences::default(),
+        }
+        .normalized();
+
+        assert_eq!(shared.tabs.len(), 1);
+        assert_eq!(shared.tasks.len(), 1);
+        assert_eq!(shared.tabs[0].name, "General");
+        assert_eq!(shared.tasks[0].text, "One");
+    }
 }

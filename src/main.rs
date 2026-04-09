@@ -1854,3 +1854,328 @@ fn parse_dt(value: &str) -> Option<NaiveDateTime> {
                 .and_then(|date| date.and_hms_opt(0, 0, 0))
         })
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::time::{SystemTime, UNIX_EPOCH};
+
+    fn sample_data() -> model::AppData {
+        let mut data = model::AppData::with_default_items("2026-04-05 12:00");
+        data.settings.tabs = model::normalize_tabs(vec![
+            model::TabSpec::default(),
+            model::TabSpec {
+                sync_id: "work".into(),
+                sync_updated_at: String::new(),
+                name: "Work".into(),
+                priority: model::TabPriority::High,
+            },
+            model::TabSpec {
+                sync_id: "android".into(),
+                sync_updated_at: String::new(),
+                name: "Android".into(),
+                priority: model::TabPriority::Normal,
+            },
+            model::TabSpec {
+                sync_id: "ideas".into(),
+                sync_updated_at: String::new(),
+                name: "Ideas".into(),
+                priority: model::TabPriority::Low,
+            },
+        ]);
+        data.active[0].tab = model::GENERAL_TAB_NAME.into();
+        data.active[1].tab = "Work".into();
+        data.active[2].tab = "Android".into();
+        data.history.push(model::TaskItem {
+            id: 99,
+            sync_id: "task-99".into(),
+            sync_updated_at: String::new(),
+            text: "Done item".into(),
+            done: true,
+            current: false,
+            created_at: "2026-04-04 10:00".into(),
+            completed_at: "2026-04-05 12:30".into(),
+            extra_info: "Completed".into(),
+            due_date: String::new(),
+            tab: "Work".into(),
+        });
+        data
+    }
+
+    fn test_state() -> AppState {
+        AppState {
+            data: sample_data(),
+            active_tab: "All".into(),
+            open_task_menu_id: None,
+            tab_window_start: 0,
+            visible_tab_count: 3,
+            history_visible: false,
+            tools_visible: false,
+            draft_visible: false,
+            draft_title: String::new(),
+            draft_extra: String::new(),
+            draft_due_date: String::new(),
+            draft_has_due: false,
+            draft_message: String::new(),
+            draft_tab_name: String::new(),
+            transfer_path: String::new(),
+            sync_enabled: false,
+            sync_provider: model::SyncProvider::LocalFile,
+            sync_path: String::new(),
+            sync_device_id: String::new(),
+            sync_google_client_id: String::new(),
+            sync_google_file_id: String::new(),
+            sync_message: String::new(),
+            startup_enabled: false,
+            startup_message: String::new(),
+            tools_message: String::new(),
+            editing_task_id: None,
+            undo_item: None,
+            store: None,
+        }
+    }
+
+    fn unique_temp_path(label: &str) -> PathBuf {
+        let nonce = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .unwrap()
+            .as_nanos();
+        std::env::temp_dir().join(format!(
+            "focus-main-{label}-{}-{nonce}.json",
+            std::process::id()
+        ))
+    }
+
+    #[test]
+    fn submit_draft_adds_task_to_selected_tab_with_normalized_due_date() {
+        let mut state = test_state();
+        state.active_tab = "Work".into();
+        state.draft_visible = true;
+        state.draft_title = "  New task  ".into();
+        state.draft_extra = "  Notes  ".into();
+        state.draft_has_due = true;
+        state.draft_due_date = "2026-04-10".into();
+
+        assert!(state.submit_draft());
+        let created = state.data.active.last().unwrap();
+        assert_eq!(created.text, "New task");
+        assert_eq!(created.extra_info, "Notes");
+        assert_eq!(created.tab, "Work");
+        assert_eq!(created.due_date, "2026-04-10 00:00");
+        assert!(!state.draft_visible);
+        assert!(state.draft_title.is_empty());
+    }
+
+    #[test]
+    fn submit_draft_updates_existing_task_when_editing() {
+        let mut state = test_state();
+        let edited_id = state.data.active[1].id;
+        state.start_edit(edited_id);
+        state.draft_title = "Edited task".into();
+        state.draft_extra = "Edited extra".into();
+        state.draft_has_due = true;
+        state.draft_due_date = "2026-04-12 18:30".into();
+
+        assert!(state.submit_draft());
+
+        let edited = state.data.active.iter().find(|task| task.id == edited_id).unwrap();
+        assert_eq!(edited.text, "Edited task");
+        assert_eq!(edited.extra_info, "Edited extra");
+        assert_eq!(edited.due_date, "2026-04-12 18:30");
+    }
+
+    #[test]
+    fn complete_task_and_undo_restore_the_item() {
+        let mut state = test_state();
+        let task_id = state.data.active[1].id;
+
+        assert!(state.complete_task(task_id));
+        assert_eq!(state.data.active.len(), 2);
+        assert!(state.undo_item.is_some());
+        assert_eq!(state.undo_item.as_ref().unwrap().id, task_id);
+        assert!(state.undo_item.as_ref().unwrap().done);
+
+        assert!(state.undo_complete());
+        assert_eq!(state.data.active[0].id, task_id);
+        assert!(state.undo_item.is_none());
+        assert!(!state.data.active[0].done);
+        assert!(state.data.active[0].completed_at.is_empty());
+    }
+
+    #[test]
+    fn finalize_pending_completion_moves_item_to_history() {
+        let mut state = test_state();
+        let task_id = state.data.active[0].id;
+        assert!(state.complete_task(task_id));
+
+        let history_before = state.data.history.len();
+        assert!(state.finalize_pending_completion());
+        assert_eq!(state.data.history.len(), history_before + 1);
+        assert!(state.data.history.iter().any(|item| item.id == task_id));
+        assert!(state.undo_item.is_none());
+    }
+
+    #[test]
+    fn toggle_current_promotes_selected_task_to_front() {
+        let mut state = test_state();
+        let promoted_id = state.data.active[2].id;
+
+        assert!(state.toggle_current(promoted_id));
+        assert_eq!(state.data.active[0].id, promoted_id);
+        assert!(state.data.active[0].current);
+        assert_eq!(state.data.active.iter().filter(|task| task.current).count(), 1);
+
+        assert!(state.toggle_current(promoted_id));
+        assert!(!state.data.active[0].current);
+        assert_eq!(state.data.active.iter().filter(|task| task.current).count(), 0);
+    }
+
+    #[test]
+    fn tab_window_resizes_and_shifts_to_keep_active_tab_visible() {
+        let mut state = test_state();
+        state.active_tab = "Ideas".into();
+
+        state.update_tab_strip_width(360.0);
+        assert_eq!(state.visible_tab_count, 1);
+        assert_eq!(state.tab_window_start, 3);
+
+        state.shift_tab_window(-1);
+        assert_eq!(state.active_tab, "Android");
+        assert_eq!(state.tab_window_start, 2);
+    }
+
+    #[test]
+    fn submit_move_and_delete_tab_updates_tasks_and_selection() {
+        let mut state = test_state();
+        state.draft_tab_name = "Later".into();
+        assert!(state.submit_tab());
+        assert_eq!(state.active_tab, "Later");
+        assert!(state.data.settings.tabs.iter().any(|tab| tab.name == "Later"));
+
+        assert!(state.move_tab("Later", -1));
+
+        state.data.active[1].tab = "Later".into();
+        assert!(state.delete_tab("Later"));
+        assert_eq!(state.active_tab, "All");
+        assert_eq!(state.data.active[1].tab, model::GENERAL_TAB_NAME);
+    }
+
+    #[test]
+    fn save_sync_config_persists_google_drive_fields_and_message() {
+        let mut state = test_state();
+        state.sync_enabled = true;
+        state.sync_provider = model::SyncProvider::GoogleDrive;
+        state.sync_device_id = "desktop".into();
+        state.sync_google_client_id = "client.apps.googleusercontent.com".into();
+        state.sync_google_file_id = "file-123".into();
+
+        assert!(state.save_sync_config());
+        assert_eq!(state.data.settings.sync.provider, model::SyncProvider::GoogleDrive);
+        assert_eq!(
+            state.data.settings.sync.google_drive_client_id,
+            "client.apps.googleusercontent.com"
+        );
+        assert_eq!(state.data.settings.sync.google_drive_file_id, "file-123");
+        assert!(state.sync_message.contains("file-123"));
+    }
+
+    #[test]
+    fn sync_now_rejects_google_drive_until_transport_exists() {
+        let mut state = test_state();
+        state.sync_enabled = true;
+        state.sync_provider = model::SyncProvider::GoogleDrive;
+        state.sync_google_client_id = "client.apps.googleusercontent.com".into();
+        state.sync_google_file_id = "file-123".into();
+
+        assert!(!state.sync_now());
+        assert!(state.sync_message.contains("OAuth transport is still pending"));
+    }
+
+    #[test]
+    fn normalize_due_input_and_url_helpers_cover_expected_cases() {
+        assert_eq!(normalize_due_input("2026-04-10").unwrap(), "2026-04-10 00:00");
+        assert_eq!(
+            normalize_due_input("2026-04-10 18:30").unwrap(),
+            "2026-04-10 18:30"
+        );
+        assert!(normalize_due_input("2026/04/10").is_err());
+
+        let url = extract_first_url("Check https://example.com/docs, now").unwrap();
+        assert_eq!(url, "https://example.com/docs");
+        assert!(short_link_label("https://example.com").starts_with("Open https://example.com"));
+    }
+
+    #[test]
+    fn build_task_views_respects_metadata_visibility() {
+        let mut data = sample_data();
+        data.active[0].extra_info = "See https://example.com/path".into();
+        data.active[0].due_date = "2026-04-10 18:30".into();
+        data.settings.show_item_meta = true;
+
+        let with_meta = build_task_views(&data, "All");
+        assert!(!with_meta[0].meta.is_empty());
+        assert!(with_meta[0].has_due_date);
+        assert!(with_meta[0].has_link);
+
+        data.settings.show_item_meta = false;
+        let without_meta = build_task_views(&data, "All");
+        assert!(without_meta[0].meta.is_empty());
+        assert!(!without_meta[0].has_due_date);
+        assert!(without_meta[0].has_link);
+    }
+
+    #[test]
+    fn theme_palette_supports_known_presets_and_falls_back() {
+        let dark = theme_palette("dark");
+        let fallback = theme_palette("unknown");
+
+        assert_eq!(dark.bg, "#141414");
+        assert_eq!(fallback.bg, "#e2d4c0");
+        assert_eq!(theme_palette("forest").accent, "#2e8830");
+    }
+
+    #[test]
+    fn footer_and_completion_counts_reflect_visible_data() {
+        let mut data = sample_data();
+        data.active[1].current = true;
+        let now = Local::now().naive_local().format("%Y-%m-%d %H:%M").to_string();
+        data.history[0].completed_at = now;
+        let (today, month, year) = completion_counts(&data);
+
+        assert_eq!(today, 1);
+        assert_eq!(month, 1);
+        assert_eq!(year, 1);
+        assert_eq!(format_footer(&data, "All"), "3 visible tasks | 1 current | 4 tabs");
+        assert_eq!(format_footer(&data, "Work"), "1 visible tasks | 1 current | 4 tabs");
+    }
+
+    #[test]
+    fn export_and_import_data_round_trip_through_transfer_path() {
+        let path = unique_temp_path("transfer");
+
+        let mut exporter = test_state();
+        exporter.transfer_path = path.display().to_string();
+        exporter.data.active[0].text = "Exported task".into();
+        assert!(exporter.export_data());
+
+        let mut importer = test_state();
+        importer.transfer_path = path.display().to_string();
+        assert!(importer.import_data());
+        assert_eq!(importer.data.active[0].text, "Exported task");
+        assert!(importer.tools_message.contains("Imported data"));
+
+        let _ = std::fs::remove_file(path);
+    }
+
+    #[test]
+    fn google_drive_sync_hint_explains_missing_fields() {
+        let mut state = test_state();
+        assert!(state.google_drive_sync_hint("manual sync").contains("client_id and file_id"));
+
+        state.sync_google_file_id = "file-123".into();
+        assert!(state.google_drive_sync_hint("manual sync").contains("desktop client_id"));
+
+        state.sync_google_client_id = "client.apps.googleusercontent.com".into();
+        assert!(state.google_drive_sync_hint("manual sync").contains("file_id: file-123"));
+    }
+}

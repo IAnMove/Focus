@@ -98,6 +98,7 @@ Portar la aplicacion actual de checklist en Python a Rust usando Slint, mantenie
 - [x] 36. Introducir un proveedor de sync configurable (`local_file` y `google_drive`) en modelos, persistencia y `Tools`, manteniendo compatibilidad con la ruta local actual.
 - [x] 37. Preparar la configuracion inicial de Google Drive en escritorio (`client_id`, `file_id` y mensajes de estado) y documentar el flujo OAuth pendiente.
 - [ ] 38. Implementar el transporte OAuth de Google Drive en escritorio para descargar/subir `focus-sync.json` al `file_id` compartido.
+- [x] 39. Ampliar la cobertura automatizada en modelos, persistencia, sync y logica principal de la aplicacion.
 
 ## Criterios de migracion
 - Mantener compatibilidad con Windows, macOS y Linux.

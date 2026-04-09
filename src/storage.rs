@@ -736,6 +736,18 @@ fn parse_sync_stamp(value: &str) -> Option<DateTime<Utc>> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::time::{SystemTime, UNIX_EPOCH};
+
+    fn unique_temp_path(label: &str) -> PathBuf {
+        let nonce = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .unwrap()
+            .as_nanos();
+        env::temp_dir().join(format!(
+            "focus-{label}-{}-{nonce}.json",
+            std::process::id()
+        ))
+    }
 
     #[test]
     fn now_stamp_uses_python_compatible_format() {
@@ -840,5 +852,169 @@ mod tests {
         assert_eq!(merged.shared.tasks.len(), 1);
         assert_eq!(merged.shared.tasks[0].status, SyncTaskStatus::Deleted);
         assert!(merged.shared.tasks[0].deleted_at.is_some());
+    }
+
+    #[test]
+    fn save_and_load_data_round_trip_truncates_history() {
+        let path = unique_temp_path("data-roundtrip");
+        let mut data = AppData::with_default_items("2026-04-05 12:00");
+        data.history = (0..260)
+            .map(|index| {
+                let mut item = TaskItem::new(index + 1000, format!("Done {index}"));
+                item.done = true;
+                item.completed_at = "2026-04-05 13:00".into();
+                item
+            })
+            .collect();
+
+        save_data_to_path(&path, &data).unwrap();
+        let restored = load_data_from_path(&path).unwrap();
+
+        assert_eq!(restored.active.len(), 3);
+        assert_eq!(restored.history.len(), 250);
+
+        let _ = fs::remove_file(path);
+    }
+
+    #[test]
+    fn save_and_load_sync_file_round_trip_preserves_writer() {
+        let path = unique_temp_path("sync-roundtrip");
+        let sync = SyncFile {
+            updated_at: "2026-04-07T20:41:12Z".into(),
+            last_writer: SyncWriter {
+                device_id: "desktop".into(),
+                app_id: "focus-desktop".into(),
+                app_version: "0.1.0".into(),
+            },
+            shared: SyncSharedData {
+                tabs: vec![SyncTabRecord {
+                    id: "general".into(),
+                    name: "General".into(),
+                    priority: crate::model::TabPriority::Normal,
+                    order: 0,
+                    updated_at: "2026-04-07T20:41:12Z".into(),
+                    deleted_at: None,
+                }],
+                tasks: vec![],
+                preferences: SyncPreferences::default(),
+            },
+            ..SyncFile::default()
+        };
+
+        save_sync_file_to_path(&path, &sync).unwrap();
+        let restored = load_sync_file_from_path(&path).unwrap();
+
+        assert_eq!(restored.last_writer.device_id, "desktop");
+        assert_eq!(restored.shared.tabs.len(), 1);
+        assert_eq!(restored.shared.tabs[0].name, "General");
+
+        let _ = fs::remove_file(path);
+    }
+
+    #[test]
+    fn sync_file_to_app_data_reassigns_unknown_tabs_and_ignores_deleted_records() {
+        let sync = SyncFile {
+            updated_at: "2026-04-07T20:41:12Z".into(),
+            shared: SyncSharedData {
+                tabs: vec![
+                    SyncTabRecord {
+                        id: "general".into(),
+                        name: "General".into(),
+                        priority: crate::model::TabPriority::Normal,
+                        order: 0,
+                        updated_at: "2026-04-07T20:41:12Z".into(),
+                        deleted_at: None,
+                    },
+                    SyncTabRecord {
+                        id: "old".into(),
+                        name: "Old".into(),
+                        priority: crate::model::TabPriority::Low,
+                        order: 1,
+                        updated_at: "2026-04-07T20:41:12Z".into(),
+                        deleted_at: Some("2026-04-07T20:50:00Z".into()),
+                    },
+                ],
+                tasks: vec![
+                    SyncTaskRecord {
+                        id: "task-1".into(),
+                        text: "Active".into(),
+                        status: SyncTaskStatus::Active,
+                        tab_id: "missing".into(),
+                        current: true,
+                        order: 0,
+                        created_at: "2026-04-07T20:10:00Z".into(),
+                        updated_at: "2026-04-07T20:41:12Z".into(),
+                        completed_at: None,
+                        deleted_at: None,
+                        extra_info: String::new(),
+                        due_date: None,
+                    },
+                    SyncTaskRecord {
+                        id: "task-2".into(),
+                        text: "Deleted".into(),
+                        status: SyncTaskStatus::Deleted,
+                        tab_id: "general".into(),
+                        current: false,
+                        order: 1,
+                        created_at: "2026-04-07T20:10:00Z".into(),
+                        updated_at: "2026-04-07T20:41:12Z".into(),
+                        completed_at: None,
+                        deleted_at: Some("2026-04-07T20:50:00Z".into()),
+                        extra_info: String::new(),
+                        due_date: None,
+                    },
+                ],
+                preferences: SyncPreferences {
+                    theme_name: "forest".into(),
+                    font_scale: 1.2,
+                    accessibility_mode: true,
+                    show_item_meta: false,
+                    updated_at: "2026-04-07T20:41:12Z".into(),
+                    ..SyncPreferences::default()
+                },
+            },
+            ..SyncFile::default()
+        };
+
+        let restored = sync_file_to_app_data(&sync, Some(&Settings::default()));
+
+        assert_eq!(restored.active.len(), 1);
+        assert!(restored.history.is_empty());
+        assert_eq!(restored.active[0].tab, crate::model::GENERAL_TAB_NAME);
+        assert_eq!(restored.settings.theme_name, "forest");
+        assert!(restored.settings.accessibility_mode);
+        assert!(!restored.settings.show_item_meta);
+        assert_eq!(restored.settings.tabs.len(), 1);
+    }
+
+    #[test]
+    fn local_and_sync_stamp_conversion_support_date_and_datetime_inputs() {
+        assert_eq!(
+            local_stamp_to_sync("2026-04-07 20:41"),
+            "2026-04-07T20:41:00Z"
+        );
+        assert_eq!(
+            local_stamp_to_sync("2026-04-07"),
+            "2026-04-07T00:00:00Z"
+        );
+        assert_eq!(sync_stamp_to_local("2026-04-07 20:41"), "2026-04-07 20:41");
+        assert!(!sync_stamp_to_local("2026-04-07T20:41:12Z").is_empty());
+    }
+
+    #[test]
+    fn merge_preferences_prefers_local_when_timestamps_match() {
+        let local = SyncPreferences {
+            theme_name: "forest".into(),
+            updated_at: "2026-04-07T20:41:12Z".into(),
+            ..SyncPreferences::default()
+        };
+        let remote = SyncPreferences {
+            theme_name: "rose".into(),
+            updated_at: "2026-04-07T20:41:12Z".into(),
+            ..SyncPreferences::default()
+        };
+
+        let merged = merge_preferences(&local, &remote, "2026-04-07T20:00:00Z");
+        assert_eq!(merged.theme_name, "forest");
     }
 }
