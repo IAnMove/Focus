@@ -458,13 +458,7 @@ component TaskCard inherits Rectangle {
     border-width: 1px;
     border-color: task.is_current ? accent : border;
     background: task.is_current ? panel-alt : panel;
-    min-height:
-        (accessibility-mode ? 68px : 60px)
-        + (task.has_due_date ? (accessibility-mode ? 44px : 38px) : 0px)
-        + (task.has_extra ? (accessibility-mode ? 28px : 24px) : 0px)
-        + (task.has_link ? (accessibility-mode ? 44px : 38px) : 0px);
-
-    VerticalLayout {
+    card-content := VerticalLayout {
         padding: 14px;
         spacing: 10px;
 
@@ -485,10 +479,13 @@ component TaskCard inherits Rectangle {
                 }
 
             VerticalLayout {
-                spacing: 4px;
+                spacing: task.meta != "" ? 4px : 0px;
                 horizontal-stretch: 1;
 
-                if (task.meta == "") : Rectangle { background: transparent; height: 2px; }
+                if (task.meta == "") : Rectangle {
+                    background: transparent;
+                    height: accessibility-mode ? 7px : 6px;
+                }
 
                 Text {
                     text: task.title;
@@ -505,14 +502,17 @@ component TaskCard inherits Rectangle {
                     wrap: word-wrap;
                 }
 
-                if (task.meta == "") : Rectangle { background: transparent; height: 2px; }
+                if (task.meta == "") : Rectangle {
+                    background: transparent;
+                    height: accessibility-mode ? 7px : 6px;
+                }
             }
 
             if (root.menu-open) : Rectangle {
                 border-radius: 14px;
                 border-width: 1px;
                 border-color: border;
-                background: panel-alt;
+                background: task.is_current ? panel : panel-alt;
                 height: root.accessibility-mode ? 42px : 36px;
                 width: root.accessibility-mode ? 254px : 224px;
 
@@ -591,7 +591,7 @@ component TaskCard inherits Rectangle {
             }
 
             RowIconButton {
-                glyph: "...";
+                glyph: "more";
                 active: root.menu-open;
                 panel: panel;
                 panel-alt: panel-alt;
@@ -680,15 +680,15 @@ component TaskCard inherits Rectangle {
         if (task.has_due_date) : Rectangle {
             border-radius: 10px;
             border-width: 1px;
-            border-color: border;
-            background: #111827;
-            height: 30px;
+            border-color: task.is_current ? accent : border;
+            background: panel-alt;
+            height: accessibility-mode ? 34px : 30px;
 
             Text {
                 x: 10px;
                 y: (parent.height - self.height) / 2;
                 text: task.due_label;
-                color: text-muted;
+                color: text-main;
                 font-size: 11px * font-scale * (accessibility-mode ? 1.08 : 1.0);
             }
         }
@@ -824,8 +824,8 @@ component TaskCard inherits Rectangle {
 
         if (task.has_due_date) : Rectangle {
             border-radius: 4px;
-            background: #0f1728;
-            height: 8px;
+            background: panel-alt;
+            height: accessibility-mode ? 10px : 8px;
 
             Rectangle {
                 x: 0;
@@ -930,6 +930,8 @@ component TaskCard inherits Rectangle {
             }
         }
     }
+
+    height: Math.max(card-content.preferred-height + 28px, accessibility-mode ? 86px : 72px);
 }
 
 component HistoryCard inherits Rectangle {
