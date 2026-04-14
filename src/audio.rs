@@ -18,6 +18,10 @@ pub fn play_complete() {
     spawn_pattern(&[(440, 80), (0, 20), (523, 90), (0, 20), (659, 140)]);
 }
 
+pub fn play_notification() {
+    spawn_pattern(&[(880, 40), (0, 20), (1046, 60)]);
+}
+
 fn spawn_pattern(pattern: &'static [(u32, u64)]) {
     thread::spawn(move || play_pattern(pattern));
 }

@@ -17,6 +17,14 @@ serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"
 # Fechas para timestamps, vencimientos y contadores de historial.
 chrono = { version = "0.4", default-features = false, features = ["clock", "serde", "std"] }
+# HTTP blocking para OAuth y Google Drive.
+reqwest = { version = "0.12", default-features = false, features = ["blocking", "json", "rustls-tls"] }
+# Escapado simple para query params OAuth.
+urlencoding = "2.1"
+# Selector de archivos nativo.
+rfd = "0.15"
+# Reproduccion simple de sonidos personalizados.
+rodio = { version = "0.20", default-features = false, features = ["wav", "mp3", "flac", "vorbis"] }
 
 [target.'cfg(windows)'.dependencies]
 # Tonos simples en Windows, equivalentes al winsound del script original.

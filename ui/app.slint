@@ -1,4 +1,4 @@
-import { Button, LineEdit, ScrollView } from "std-widgets.slint";
+import { Button, Date, DatePickerPopup, LineEdit, ScrollView, Time, TimePickerPopup } from "std-widgets.slint";
 
 export struct TabView {
     name: string,
@@ -337,7 +337,7 @@ component AppButton inherits Rectangle {
     in property <bool> accessibility-mode: false;
     callback clicked();
 
-    min-width: compact ? (accessibility-mode ? 56px : 44px) : (accessibility-mode ? 110px : 92px);
+    min-width: compact ? (accessibility-mode ? 56px : 44px) : (accessibility-mode ? 104px : 84px);
     height: accessibility-mode ? 40px : 34px;
     border-radius: 12px;
     border-width: 1px;
@@ -446,6 +446,9 @@ component TaskCard inherits Rectangle {
     callback move-up(task-id: int);
     callback move-down(task-id: int);
     callback cycle-tab(task-id: int);
+    callback set-reminder(task-id: int, minutes: int);
+    callback clear-reminder(task-id: int);
+    callback set-due-warning(task-id: int, minutes: int);
     callback drag-step(task-id: int, delta: int);
     callback open-link(url: string);
     callback toggle-menu(task-id: int);
@@ -677,6 +680,13 @@ component TaskCard inherits Rectangle {
             }
         }
 
+        if (task.has_extra) : Text {
+            text: task.extra;
+            color: text-muted;
+            wrap: word-wrap;
+            font-size: 12px * font-scale * (accessibility-mode ? 1.08 : 1.0);
+        }
+
         if (task.has_due_date) : Rectangle {
             border-radius: 10px;
             border-width: 1px;
@@ -690,6 +700,103 @@ component TaskCard inherits Rectangle {
                 text: task.due_label;
                 color: text-main;
                 font-size: 11px * font-scale * (accessibility-mode ? 1.08 : 1.0);
+            }
+        }
+
+        if (root.menu-open) : Rectangle {
+            border-radius: 14px;
+            border-width: 1px;
+            border-color: border;
+            background: panel-alt;
+            min-height: accessibility-mode ? 138px : 122px;
+
+            VerticalLayout {
+                padding: 10px;
+                spacing: 8px;
+
+                Text {
+                    text: "Remind me in";
+                    color: text-main;
+                    font-size: 11px * font-scale;
+                    font-weight: 700;
+                }
+
+                HorizontalLayout {
+                    spacing: 6px;
+
+                    AppButton {
+                        text: "5m";
+                        compact: true;
+                        panel: panel;
+                        panel-alt: panel-alt;
+                        accent: accent;
+                        border: border;
+                        text-main: text-main;
+                        text-muted: text-muted;
+                        font-scale: root.font-scale;
+                        accessibility-mode: root.accessibility-mode;
+                        clicked => { root.set-reminder(task.id, 5); }
+                    }
+
+                    AppButton {
+                        text: "15m";
+                        compact: true;
+                        panel: panel;
+                        panel-alt: panel-alt;
+                        accent: accent;
+                        border: border;
+                        text-main: text-main;
+                        text-muted: text-muted;
+                        font-scale: root.font-scale;
+                        accessibility-mode: root.accessibility-mode;
+                        clicked => { root.set-reminder(task.id, 15); }
+                    }
+
+                    AppButton {
+                        text: "30m";
+                        compact: true;
+                        panel: panel;
+                        panel-alt: panel-alt;
+                        accent: accent;
+                        border: border;
+                        text-main: text-main;
+                        text-muted: text-muted;
+                        font-scale: root.font-scale;
+                        accessibility-mode: root.accessibility-mode;
+                        clicked => { root.set-reminder(task.id, 30); }
+                    }
+
+                    AppButton {
+                        text: "Clear";
+                        compact: true;
+                        panel: panel;
+                        panel-alt: panel-alt;
+                        accent: accent;
+                        border: border;
+                        text-main: text-main;
+                        text-muted: text-muted;
+                        font-scale: root.font-scale;
+                        accessibility-mode: root.accessibility-mode;
+                        clicked => { root.clear-reminder(task.id); }
+                    }
+                }
+
+                Text {
+                    text: "Due warning";
+                    color: text-main;
+                    font-size: 11px * font-scale;
+                    font-weight: 700;
+                }
+
+                HorizontalLayout {
+                    spacing: 6px;
+
+                    AppButton { text: "Off"; compact: true; panel: panel; panel-alt: panel-alt; accent: accent; border: border; text-main: text-main; text-muted: text-muted; font-scale: root.font-scale; accessibility-mode: root.accessibility-mode; clicked => { root.set-due-warning(task.id, 0); } }
+                    AppButton { text: "5m"; compact: true; panel: panel; panel-alt: panel-alt; accent: accent; border: border; text-main: text-main; text-muted: text-muted; font-scale: root.font-scale; accessibility-mode: root.accessibility-mode; clicked => { root.set-due-warning(task.id, 5); } }
+                    AppButton { text: "15m"; compact: true; panel: panel; panel-alt: panel-alt; accent: accent; border: border; text-main: text-main; text-muted: text-muted; font-scale: root.font-scale; accessibility-mode: root.accessibility-mode; clicked => { root.set-due-warning(task.id, 15); } }
+                    AppButton { text: "30m"; compact: true; panel: panel; panel-alt: panel-alt; accent: accent; border: border; text-main: text-main; text-muted: text-muted; font-scale: root.font-scale; accessibility-mode: root.accessibility-mode; clicked => { root.set-due-warning(task.id, 30); } }
+                    AppButton { text: "1h"; compact: true; panel: panel; panel-alt: panel-alt; accent: accent; border: border; text-main: text-main; text-muted: text-muted; font-scale: root.font-scale; accessibility-mode: root.accessibility-mode; clicked => { root.set-due-warning(task.id, 60); } }
+                }
             }
         }
 
@@ -835,13 +942,6 @@ component TaskCard inherits Rectangle {
                 border-radius: 4px;
                 background: accent;
             }
-        }
-
-        if (task.has_extra) : Text {
-            text: task.extra;
-            color: text-muted;
-            wrap: word-wrap;
-            font-size: 12px * font-scale * (accessibility-mode ? 1.08 : 1.0);
         }
 
         if (task.has_link) : AppButton {
@@ -1110,6 +1210,7 @@ component TabManagerCard inherits Rectangle {
 }
 
 export component AppWindow inherits Window {
+    icon: @image-url("focus-logo.svg");
     in-out property <string> app-title: "focus";
     in-out property <string> status-text: "Loading";
     in-out property <string> footer-text: "";
@@ -1132,6 +1233,11 @@ export component AppWindow inherits Window {
     in-out property <bool> draft-has-due: false;
     in-out property <string> draft-message: "";
     in-out property <string> draft-tab-name: "";
+    in-out property <int> draft-due-picker-year: 0;
+    in-out property <int> draft-due-picker-month: 0;
+    in-out property <int> draft-due-picker-day: 0;
+    in-out property <int> draft-due-picker-hour: 0;
+    in-out property <int> draft-due-picker-minute: 0;
     in-out property <string> transfer-path: "";
     in-out property <string> tools-message: "";
     in-out property <bool> sync-enabled: false;
@@ -1141,6 +1247,11 @@ export component AppWindow inherits Window {
     in-out property <string> sync-google-client-id: "";
     in-out property <string> sync-google-file-id: "";
     in-out property <string> sync-message: "";
+    in-out property <bool> notifications-enabled: true;
+    in-out property <bool> notify-only-when-app-hidden: false;
+    in-out property <bool> notification-sound-enabled: true;
+    in-out property <string> notification-sound-path: "";
+    in-out property <string> default-due-warning-label: "Off";
     in-out property <bool> startup-enabled: false;
     in-out property <string> startup-message: "";
     in-out property <string> about-version: "";
@@ -1166,6 +1277,7 @@ export component AppWindow inherits Window {
     callback select-tab(name: string);
     callback submit-draft();
     callback cancel-draft();
+    callback draft-due-picked(year: int, month: int, day: int, hour: int, minute: int);
     callback complete-task(task-id: int);
     callback edit-task(task-id: int);
     callback delete-task(task-id: int);
@@ -1175,6 +1287,9 @@ export component AppWindow inherits Window {
     callback move-task-up(task-id: int);
     callback move-task-down(task-id: int);
     callback cycle-task-tab(task-id: int);
+    callback set-task-reminder(task-id: int, minutes: int);
+    callback clear-task-reminder(task-id: int);
+    callback set-task-due-warning(task-id: int, minutes: int);
     callback drag-task-step(task-id: int, delta: int);
     callback toggle-task-menu(task-id: int);
     callback submit-tab();
@@ -1191,7 +1306,13 @@ export component AppWindow inherits Window {
     callback toggle-startup();
     callback open-task-link(url: string);
     callback open-project-link();
+    callback open-sync-info();
+    callback save-notification-config();
+    callback choose-notification-sound();
+    callback clear-notification-sound();
+    callback test-notification-sound();
     callback save-sync-config();
+    callback choose-sync-path();
     callback sync-now();
     callback shift-tabs-left();
     callback shift-tabs-right();
@@ -1233,7 +1354,7 @@ export component AppWindow inherits Window {
             border-width: 1px;
             border-color: root.border;
             background: root.panel-alt;
-            height: 102px;
+            height: 88px;
             property <bool> show-header-actions: header_hover.has-hover || add_action.hovered || history_action.hovered || tools_action.hovered || pin_action.hovered;
 
             header_hover := TouchArea {
@@ -1255,7 +1376,9 @@ export component AppWindow inherits Window {
                     VerticalLayout {
                         width: parent.width;
                         height: parent.height;
-                        spacing: 4px;
+                        padding-top: 6px;
+                        padding-bottom: 6px;
+                        spacing: 2px;
 
                         Text {
                             text: root.app-title;
@@ -1373,7 +1496,7 @@ export component AppWindow inherits Window {
                     spacing: 8px;
 
                     AppButton {
-                        text: root.draft-has-due ? "Due enabled" : "Enable due";
+                        text: root.draft-has-due ? "Change due date" : "Set due date";
                         panel: root.panel;
                         panel-alt: root.panel-alt;
                         accent: root.accent;
@@ -1382,7 +1505,7 @@ export component AppWindow inherits Window {
                         text-muted: root.text-muted;
                         font-scale: root.font-scale;
                         accessibility-mode: root.accessibility-mode;
-                        clicked => { root.draft-has-due = !root.draft-has-due; }
+                        clicked => { due_date_picker.show(); }
                     }
 
                     if (root.draft-has-due) : AppButton {
@@ -1403,13 +1526,8 @@ export component AppWindow inherits Window {
                     }
                 }
 
-                if (root.draft-has-due) : LineEdit {
-                    text <=> root.draft-due-date;
-                    placeholder-text: "YYYY-MM-DD or YYYY-MM-DD HH:MM";
-                }
-
                 if (root.draft-has-due) : Text {
-                    text: "Accepted formats: 2025-03-14 or 2025-03-14 18:30";
+                    text: "Due " + root.draft-due-date;
                     color: root.text-muted;
                     wrap: word-wrap;
                     font-size: root.font-caption;
@@ -1453,6 +1571,44 @@ export component AppWindow inherits Window {
                         clicked => { root.cancel-draft(); }
                     }
                 }
+            }
+        }
+
+        due_date_picker := DatePickerPopup {
+            title: "Select due date";
+            date: {
+                year: root.draft-due-picker-year,
+                month: root.draft-due-picker-month,
+                day: root.draft-due-picker-day
+            };
+
+            accepted(date) => {
+                root.draft-due-picker-year = date.year;
+                root.draft-due-picker-month = date.month;
+                root.draft-due-picker-day = date.day;
+                time_picker.show();
+            }
+        }
+
+        time_picker := TimePickerPopup {
+            title: "Select due time";
+            use-24-hour-format: true;
+            time: {
+                hour: root.draft-due-picker-hour,
+                minute: root.draft-due-picker-minute,
+                second: 0
+            };
+
+            accepted(time) => {
+                root.draft-due-picker-hour = time.hour;
+                root.draft-due-picker-minute = time.minute;
+                root.draft-due-picked(
+                    root.draft-due-picker-year,
+                    root.draft-due-picker-month,
+                    root.draft-due-picker-day,
+                    time.hour,
+                    time.minute
+                );
             }
         }
 
@@ -1568,7 +1724,7 @@ export component AppWindow inherits Window {
 
                     VerticalLayout {
                         spacing: 10px;
-                        padding-right: 2px;
+                        padding-right: 12px;
 
                         for task[index] in root.tasks : TaskCard {
                             task: task;
@@ -1589,6 +1745,9 @@ export component AppWindow inherits Window {
                             move-up(task-id) => { root.move-task-up(task-id); }
                             move-down(task-id) => { root.move-task-down(task-id); }
                             cycle-tab(task-id) => { root.cycle-task-tab(task-id); }
+                            set-reminder(task-id, minutes) => { root.set-task-reminder(task-id, minutes); }
+                            clear-reminder(task-id) => { root.clear-task-reminder(task-id); }
+                            set-due-warning(task-id, minutes) => { root.set-task-due-warning(task-id, minutes); }
                             drag-step(task-id, delta) => { root.drag-task-step(task-id, delta); }
                             open-link(url) => { root.open-task-link(url); }
                             toggle-menu(task-id) => { root.toggle-task-menu(task-id); }
@@ -1659,7 +1818,7 @@ export component AppWindow inherits Window {
 
                     VerticalLayout {
                         spacing: 10px;
-                        padding-right: 2px;
+                        padding-right: 12px;
 
                         for entry[index] in root.history-items : HistoryCard {
                             entry: entry;
@@ -1712,17 +1871,18 @@ export component AppWindow inherits Window {
 
                     VerticalLayout {
                         spacing: 12px;
-                        padding-right: 2px;
+                        padding-right: 10px;
 
                         Rectangle {
                             border-radius: 18px;
                             border-width: 1px;
                             border-color: root.border;
                             background: root.panel-soft;
-                            min-height: 118px;
+                            min-height: 134px;
 
                             VerticalLayout {
                                 padding: 14px;
+                                padding-bottom: 18px;
                                 spacing: 8px;
 
                                 Text {
@@ -1749,6 +1909,210 @@ export component AppWindow inherits Window {
                                     font-scale: root.font-scale;
                                     accessibility-mode: root.accessibility-mode;
                                     clicked => { root.submit-tab(); }
+                                }
+                            }
+                        }
+
+                        Rectangle {
+                            border-radius: 18px;
+                            border-width: 1px;
+                            border-color: root.border;
+                            background: root.panel-soft;
+                            min-height: 286px;
+
+                            VerticalLayout {
+                                padding: 14px;
+                                spacing: 8px;
+
+                                Text {
+                                    text: "Notifications";
+                                    color: root.text-main;
+                                    font-size: root.font-section;
+                                    font-weight: 700;
+                                }
+
+                                HorizontalLayout {
+                                    spacing: 8px;
+
+                                    AppButton {
+                                        text: root.notifications-enabled ? "Notifications on" : "Notifications off";
+                                        panel: root.panel;
+                                        panel-alt: root.panel-alt;
+                                        accent: root.accent;
+                                        border: root.border;
+                                        text-main: root.text-main;
+                                        text-muted: root.text-muted;
+                                        font-scale: root.font-scale;
+                                        accessibility-mode: root.accessibility-mode;
+                                        clicked => { root.notifications-enabled = !root.notifications-enabled; root.save-notification-config(); }
+                                    }
+
+                                    AppButton {
+                                        text: root.notify-only-when-app-hidden ? "Only when hidden" : "Show while focused";
+                                        panel: root.panel;
+                                        panel-alt: root.panel-alt;
+                                        accent: root.accent;
+                                        border: root.border;
+                                        text-main: root.text-main;
+                                        text-muted: root.text-muted;
+                                        font-scale: root.font-scale;
+                                        accessibility-mode: root.accessibility-mode;
+                                        clicked => { root.notify-only-when-app-hidden = !root.notify-only-when-app-hidden; root.save-notification-config(); }
+                                    }
+                                }
+
+                                HorizontalLayout {
+                                    spacing: 8px;
+
+                                    AppButton {
+                                        text: root.notification-sound-enabled ? "Sound on" : "Sound off";
+                                        panel: root.panel;
+                                        panel-alt: root.panel-alt;
+                                        accent: root.accent-warm;
+                                        border: root.border;
+                                        text-main: root.text-main;
+                                        text-muted: root.text-muted;
+                                        font-scale: root.font-scale;
+                                        accessibility-mode: root.accessibility-mode;
+                                        clicked => { root.notification-sound-enabled = !root.notification-sound-enabled; root.save-notification-config(); }
+                                    }
+
+                                    AppButton {
+                                        text: "Choose sound";
+                                        panel: root.panel;
+                                        panel-alt: root.panel-alt;
+                                        accent: root.accent;
+                                        border: root.border;
+                                        text-main: root.text-main;
+                                        text-muted: root.text-muted;
+                                        font-scale: root.font-scale;
+                                        accessibility-mode: root.accessibility-mode;
+                                        clicked => { root.choose-notification-sound(); }
+                                    }
+
+                                    AppButton {
+                                        text: "Clear sound";
+                                        panel: root.panel;
+                                        panel-alt: root.panel-alt;
+                                        accent: root.accent;
+                                        border: root.border;
+                                        text-main: root.text-main;
+                                        text-muted: root.text-muted;
+                                        font-scale: root.font-scale;
+                                        accessibility-mode: root.accessibility-mode;
+                                        clicked => { root.clear-notification-sound(); }
+                                    }
+                                }
+
+                                HorizontalLayout {
+                                    spacing: 8px;
+
+                                    Text {
+                                        text: "Default due warning: " + root.default-due-warning-label;
+                                        color: root.text-main;
+                                        vertical-alignment: center;
+                                        font-size: root.font-body;
+                                    }
+
+                                    AppButton {
+                                        text: "Off";
+                                        compact: true;
+                                        panel: root.panel;
+                                        panel-alt: root.panel-alt;
+                                        accent: root.accent;
+                                        border: root.border;
+                                        text-main: root.text-main;
+                                        text-muted: root.text-muted;
+                                        font-scale: root.font-scale;
+                                        accessibility-mode: root.accessibility-mode;
+                                        clicked => { root.default-due-warning-label = "Off"; }
+                                    }
+
+                                    AppButton {
+                                        text: "5m";
+                                        compact: true;
+                                        panel: root.panel;
+                                        panel-alt: root.panel-alt;
+                                        accent: root.accent;
+                                        border: root.border;
+                                        text-main: root.text-main;
+                                        text-muted: root.text-muted;
+                                        font-scale: root.font-scale;
+                                        accessibility-mode: root.accessibility-mode;
+                                        clicked => { root.default-due-warning-label = "5m"; }
+                                    }
+
+                                    AppButton {
+                                        text: "15m";
+                                        compact: true;
+                                        panel: root.panel;
+                                        panel-alt: root.panel-alt;
+                                        accent: root.accent;
+                                        border: root.border;
+                                        text-main: root.text-main;
+                                        text-muted: root.text-muted;
+                                        font-scale: root.font-scale;
+                                        accessibility-mode: root.accessibility-mode;
+                                        clicked => { root.default-due-warning-label = "15m"; }
+                                    }
+
+                                    AppButton {
+                                        text: "30m";
+                                        compact: true;
+                                        panel: root.panel;
+                                        panel-alt: root.panel-alt;
+                                        accent: root.accent;
+                                        border: root.border;
+                                        text-main: root.text-main;
+                                        text-muted: root.text-muted;
+                                        font-scale: root.font-scale;
+                                        accessibility-mode: root.accessibility-mode;
+                                        clicked => { root.default-due-warning-label = "30m"; }
+                                    }
+
+                                    AppButton {
+                                        text: "1h";
+                                        panel: root.panel;
+                                        panel-alt: root.panel-alt;
+                                        accent: root.accent;
+                                        border: root.border;
+                                        text-main: root.text-main;
+                                        text-muted: root.text-muted;
+                                        font-scale: root.font-scale;
+                                        accessibility-mode: root.accessibility-mode;
+                                        clicked => { root.default-due-warning-label = "1h"; }
+                                    }
+                                }
+
+                                HorizontalLayout {
+                                    spacing: 8px;
+
+                                    AppButton {
+                                        text: "Save notification settings";
+                                        primary: true;
+                                        panel: root.panel;
+                                        panel-alt: root.panel-alt;
+                                        accent: root.accent;
+                                        border: root.border;
+                                        text-main: root.text-main;
+                                        text-muted: root.text-muted;
+                                        font-scale: root.font-scale;
+                                        accessibility-mode: root.accessibility-mode;
+                                        clicked => { root.save-notification-config(); }
+                                    }
+
+                                    AppButton {
+                                        text: "Test sound";
+                                        panel: root.panel;
+                                        panel-alt: root.panel-alt;
+                                        accent: root.accent-warm;
+                                        border: root.border;
+                                        text-main: root.text-main;
+                                        text-muted: root.text-muted;
+                                        font-scale: root.font-scale;
+                                        accessibility-mode: root.accessibility-mode;
+                                        clicked => { root.test-notification-sound(); }
+                                    }
                                 }
                             }
                         }
@@ -1904,7 +2268,7 @@ export component AppWindow inherits Window {
                             border-width: 1px;
                             border-color: root.border;
                             background: root.panel-soft;
-                            min-height: 128px;
+                            min-height: 146px;
 
                             VerticalLayout {
                                 padding: 14px;
@@ -1997,11 +2361,12 @@ export component AppWindow inherits Window {
                             border-width: 1px;
                             border-color: root.border;
                             background: root.panel-soft;
-                            min-height: root.sync-provider == "google_drive" ? 304px : 236px;
+                            min-height: root.sync-provider == "google_drive" ? 528px : 336px;
 
                             VerticalLayout {
                                 padding: 14px;
-                                spacing: 8px;
+                                padding-bottom: 18px;
+                                spacing: 10px;
 
                                 Text {
                                     text: "External sync";
@@ -2012,8 +2377,8 @@ export component AppWindow inherits Window {
 
                                 Text {
                                     text: root.sync-provider == "google_drive"
-                                        ? "Shared source of truth via provider abstraction. Google Drive wiring is configured here and transport comes next."
-                                        : "Optional shared source of truth for desktop and Android.";
+                                        ? "Use the same focus-sync.json stored in Google Drive."
+                                        : "Use a shared focus-sync.json for desktop and Android.";
                                     color: root.text-muted;
                                     wrap: word-wrap;
                                     font-size: root.font-body;
@@ -2052,8 +2417,21 @@ export component AppWindow inherits Window {
                                 }
 
                                 if (root.sync-provider == "local_file") : LineEdit {
-                                    text <=> root.sync-path;
-                                    placeholder-text: "Path to focus-sync.json";
+                                    text: root.sync-path != "" ? root.sync-path : "No sync file selected";
+                                    read-only: true;
+                                }
+
+                                if (root.sync-provider == "local_file") : AppButton {
+                                    text: "Browse sync file";
+                                    panel: root.panel;
+                                    panel-alt: root.panel-alt;
+                                    accent: root.accent;
+                                    border: root.border;
+                                    text-main: root.text-main;
+                                    text-muted: root.text-muted;
+                                    font-scale: root.font-scale;
+                                    accessibility-mode: root.accessibility-mode;
+                                    clicked => { root.choose-sync-path(); }
                                 }
 
                                 if (root.sync-provider == "google_drive") : Rectangle {
@@ -2061,14 +2439,28 @@ export component AppWindow inherits Window {
                                     border-width: 1px;
                                     border-color: root.border;
                                     background: root.panel;
-                                    min-height: 124px;
+                                    min-height: 184px;
 
                                     VerticalLayout {
                                         padding: 10px;
                                         spacing: 8px;
 
                                         Text {
-                                            text: "Provider selected: Google Drive. Store the desktop client_id and the shared file_id here; OAuth desktop transport is the next step.";
+                                            text: "1. Create a Desktop OAuth client in Google Cloud.";
+                                            color: root.text-muted;
+                                            wrap: word-wrap;
+                                            font-size: root.font-body;
+                                        }
+
+                                        Text {
+                                            text: "2. Copy the Drive file ID from the JSON file URL.";
+                                            color: root.text-muted;
+                                            wrap: word-wrap;
+                                            font-size: root.font-body;
+                                        }
+
+                                        Text {
+                                            text: "3. Device id is just this machine label. Leave the default unless you sync several computers.";
                                             color: root.text-muted;
                                             wrap: word-wrap;
                                             font-size: root.font-body;
@@ -2086,9 +2478,16 @@ export component AppWindow inherits Window {
                                     }
                                 }
 
+                                Text {
+                                    text: "Device id: local name for this computer.";
+                                    color: root.text-muted;
+                                    wrap: word-wrap;
+                                    font-size: root.font-body;
+                                }
+
                                 LineEdit {
                                     text <=> root.sync-device-id;
-                                    placeholder-text: "Device id";
+                                    placeholder-text: "e.g. focus-laptop";
                                 }
 
                                 HorizontalLayout {
@@ -2119,27 +2518,51 @@ export component AppWindow inherits Window {
                                         accessibility-mode: root.accessibility-mode;
                                         clicked => { root.save-sync-config(); }
                                     }
-
-                                    AppButton {
-                                        text: "Sync now";
-                                        primary: true;
-                                        panel: root.panel;
-                                        panel-alt: root.panel-alt;
-                                        accent: root.accent;
-                                        border: root.border;
-                                        text-main: root.text-main;
-                                        text-muted: root.text-muted;
-                                        font-scale: root.font-scale;
-                                        accessibility-mode: root.accessibility-mode;
-                                        clicked => { root.sync-now(); }
-                                    }
                                 }
 
-                                Text {
-                                    text: root.sync-message;
-                                    color: root.text-muted;
-                                    wrap: word-wrap;
-                                    font-size: root.font-body;
+                                AppButton {
+                                    text: "Sync now";
+                                    primary: true;
+                                    panel: root.panel;
+                                    panel-alt: root.panel-alt;
+                                    accent: root.accent;
+                                    border: root.border;
+                                    text-main: root.text-main;
+                                    text-muted: root.text-muted;
+                                    font-scale: root.font-scale;
+                                    accessibility-mode: root.accessibility-mode;
+                                    clicked => { root.sync-now(); }
+                                }
+
+                                AppButton {
+                                    text: "Info";
+                                    panel: root.panel;
+                                    panel-alt: root.panel-alt;
+                                    accent: root.accent-warm;
+                                    border: root.border;
+                                    text-main: root.text-main;
+                                    text-muted: root.text-muted;
+                                    font-scale: root.font-scale;
+                                    accessibility-mode: root.accessibility-mode;
+                                    clicked => { root.open-sync-info(); }
+                                }
+
+                                if (root.sync-message != "") : Rectangle {
+                                    border-radius: 12px;
+                                    border-width: 1px;
+                                    border-color: root.border;
+                                    background: root.panel;
+                                    min-height: 52px;
+
+                                    Text {
+                                        x: 10px;
+                                        y: 8px;
+                                        width: parent.width - 20px;
+                                        text: root.sync-message;
+                                        color: root.text-muted;
+                                        wrap: word-wrap;
+                                        font-size: root.font-body;
+                                    }
                                 }
                             }
                         }
@@ -2149,7 +2572,7 @@ export component AppWindow inherits Window {
                             border-width: 1px;
                             border-color: root.border;
                             background: root.panel-soft;
-                            min-height: 154px;
+                            min-height: 164px;
 
                             VerticalLayout {
                                 padding: 14px;
@@ -2162,16 +2585,18 @@ export component AppWindow inherits Window {
                                     font-weight: 700;
                                 }
 
-                                LineEdit {
-                                    text <=> root.transfer-path;
-                                    placeholder-text: "Path to JSON file";
+                                Text {
+                                    text: root.transfer-path != "" ? root.transfer-path : "Choose a file for import or export";
+                                    color: root.text-muted;
+                                    wrap: word-wrap;
+                                    font-size: root.font-body;
                                 }
 
                                 HorizontalLayout {
                                     spacing: 8px;
 
                                     AppButton {
-                                        text: "Import";
+                                        text: "Import file";
                                         panel: root.panel;
                                         panel-alt: root.panel-alt;
                                         accent: root.accent;
@@ -2184,7 +2609,7 @@ export component AppWindow inherits Window {
                                     }
 
                                     AppButton {
-                                        text: "Export";
+                                        text: "Export file";
                                         primary: true;
                                         panel: root.panel;
                                         panel-alt: root.panel-alt;
@@ -2198,7 +2623,7 @@ export component AppWindow inherits Window {
                                     }
                                 }
 
-                                Text {
+                                if (root.tools-message != "") : Text {
                                     text: root.tools-message;
                                     color: root.text-muted;
                                     wrap: word-wrap;
@@ -2226,10 +2651,11 @@ export component AppWindow inherits Window {
                             border-width: 1px;
                             border-color: root.border;
                             background: root.panel-soft;
-                            min-height: 148px;
+                            min-height: 184px;
 
                             VerticalLayout {
                                 padding: 14px;
+                                padding-bottom: 18px;
                                 spacing: 8px;
 
                                 Text {
@@ -2244,6 +2670,23 @@ export component AppWindow inherits Window {
                                     color: root.text-muted;
                                     wrap: word-wrap;
                                     font-size: root.font-body;
+                                }
+
+                                Rectangle {
+                                    width: 72px;
+                                    height: 72px;
+                                    border-radius: 18px;
+                                    background: root.panel;
+                                    border-width: 1px;
+                                    border-color: root.border;
+
+                                    Image {
+                                        x: 8px;
+                                        y: 8px;
+                                        width: 56px;
+                                        height: 56px;
+                                        source: @image-url("focus-logo.svg");
+                                    }
                                 }
 
                                 Text {

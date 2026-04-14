@@ -80,6 +80,14 @@ pub struct TaskItem {
     pub extra_info: String,
     #[serde(default)]
     pub due_date: String,
+    #[serde(default)]
+    pub reminder_at: String,
+    #[serde(default)]
+    pub reminder_sent_at: String,
+    #[serde(default)]
+    pub due_warning_offset_minutes: u32,
+    #[serde(default)]
+    pub due_warning_sent_at: String,
     #[serde(default = "default_task_tab")]
     pub tab: String,
 }
@@ -97,6 +105,10 @@ impl TaskItem {
             completed_at: String::new(),
             extra_info: String::new(),
             due_date: String::new(),
+            reminder_at: String::new(),
+            reminder_sent_at: String::new(),
+            due_warning_offset_minutes: 0,
+            due_warning_sent_at: String::new(),
             tab: default_task_tab(),
         }
     }
@@ -117,6 +129,10 @@ impl TaskItem {
         self.sync_updated_at = self.sync_updated_at.trim().to_string();
         self.done = false;
         self.completed_at.clear();
+        self.reminder_at = self.reminder_at.trim().to_string();
+        self.reminder_sent_at = self.reminder_sent_at.trim().to_string();
+        self.due_warning_offset_minutes = normalize_due_warning_offset(self.due_warning_offset_minutes);
+        self.due_warning_sent_at = self.due_warning_sent_at.trim().to_string();
         self.tab = normalize_tab_name(&self.tab);
         if self.tab.is_empty() {
             self.tab = default_task_tab();
@@ -140,6 +156,10 @@ impl TaskItem {
         self.sync_updated_at = self.sync_updated_at.trim().to_string();
         self.done = true;
         self.current = false;
+        self.reminder_at = String::new();
+        self.reminder_sent_at = String::new();
+        self.due_warning_offset_minutes = normalize_due_warning_offset(self.due_warning_offset_minutes);
+        self.due_warning_sent_at = self.due_warning_sent_at.trim().to_string();
         self.tab = normalize_tab_name(&self.tab);
         if self.tab.is_empty() {
             self.tab = default_task_tab();
@@ -169,6 +189,24 @@ pub struct Settings {
     #[serde(default)]
     pub preferences_updated_at: String,
     #[serde(default)]
+    pub notifications_enabled: bool,
+    #[serde(default)]
+    pub notify_only_when_app_hidden: bool,
+    #[serde(default)]
+    pub notification_sound_enabled: bool,
+    #[serde(default)]
+    pub notification_sound_path: String,
+    #[serde(default)]
+    pub quiet_hours_enabled: bool,
+    #[serde(default)]
+    pub quiet_hours_start: String,
+    #[serde(default)]
+    pub quiet_hours_end: String,
+    #[serde(default)]
+    pub default_due_warning_offset_minutes: u32,
+    #[serde(default)]
+    pub notifications_updated_at: String,
+    #[serde(default)]
     pub sync: SyncConfig,
     #[serde(flatten)]
     pub extra: BTreeMap<String, Value>,
@@ -186,6 +224,15 @@ impl Default for Settings {
             tab_visible_count: default_tab_visible_count(),
             always_on_top: default_always_on_top(),
             preferences_updated_at: String::new(),
+            notifications_enabled: true,
+            notify_only_when_app_hidden: false,
+            notification_sound_enabled: true,
+            notification_sound_path: String::new(),
+            quiet_hours_enabled: false,
+            quiet_hours_start: "22:00".into(),
+            quiet_hours_end: "08:00".into(),
+            default_due_warning_offset_minutes: 0,
+            notifications_updated_at: String::new(),
             sync: SyncConfig::default(),
             extra: BTreeMap::new(),
         }
@@ -201,6 +248,12 @@ impl Settings {
         self.font_scale = self.font_scale.clamp(0.8, 1.8);
         self.tab_visible_count = self.tab_visible_count.clamp(2, 12);
         self.preferences_updated_at = self.preferences_updated_at.trim().to_string();
+        self.notification_sound_path = self.notification_sound_path.trim().to_string();
+        self.quiet_hours_start = normalize_hhmm(&self.quiet_hours_start, "22:00");
+        self.quiet_hours_end = normalize_hhmm(&self.quiet_hours_end, "08:00");
+        self.default_due_warning_offset_minutes =
+            normalize_due_warning_offset(self.default_due_warning_offset_minutes);
+        self.notifications_updated_at = self.notifications_updated_at.trim().to_string();
         self.sync = self.sync.normalized();
         self.custom_palette = self
             .custom_palette
@@ -257,6 +310,8 @@ pub struct SyncConfig {
     #[serde(default)]
     pub google_drive_file_id: String,
     #[serde(default)]
+    pub google_drive_refresh_token: String,
+    #[serde(default)]
     pub last_sync_at: String,
 }
 
@@ -266,6 +321,7 @@ impl SyncConfig {
         self.device_id = self.device_id.trim().to_string();
         self.google_drive_client_id = self.google_drive_client_id.trim().to_string();
         self.google_drive_file_id = self.google_drive_file_id.trim().to_string();
+        self.google_drive_refresh_token = self.google_drive_refresh_token.trim().to_string();
         self.last_sync_at = self.last_sync_at.trim().to_string();
         self
     }
@@ -634,6 +690,31 @@ pub fn task_sync_id_from_legacy_id(id: u64) -> String {
     format!("task-{id}")
 }
 
+pub fn normalize_due_warning_offset(value: u32) -> u32 {
+    match value {
+        5 | 15 | 30 | 60 => value,
+        _ => 0,
+    }
+}
+
+pub fn normalize_hhmm(value: &str, fallback: &str) -> String {
+    let trimmed = value.trim();
+    if let Some((left, right)) = trimmed.split_once(':') {
+        if left.len() == 2
+            && right.len() == 2
+            && left.chars().all(|ch| ch.is_ascii_digit())
+            && right.chars().all(|ch| ch.is_ascii_digit())
+        {
+            let hours: u32 = left.parse().unwrap_or(24);
+            let minutes: u32 = right.parse().unwrap_or(60);
+            if hours < 24 && minutes < 60 {
+                return format!("{hours:02}:{minutes:02}");
+            }
+        }
+    }
+    fallback.to_string()
+}
+
 fn is_hex_color(value: &str) -> bool {
     let bytes = value.as_bytes();
     bytes.len() == 7 && bytes[0] == b'#' && bytes[1..].iter().all(|byte| byte.is_ascii_hexdigit())
@@ -680,6 +761,10 @@ mod tests {
             completed_at: "2026-04-05 13:00".into(),
             extra_info: String::new(),
             due_date: String::new(),
+            reminder_at: String::new(),
+            reminder_sent_at: String::new(),
+            due_warning_offset_minutes: 0,
+            due_warning_sent_at: String::new(),
             tab: "   ".into(),
         }
         .normalize_active(7)
@@ -755,6 +840,7 @@ mod tests {
             device_id: "  desktop-win11  ".into(),
             google_drive_client_id: "  desktop-client-id.apps.googleusercontent.com  ".into(),
             google_drive_file_id: "  1abCDefGhIJklmnOP  ".into(),
+            google_drive_refresh_token: "  refresh-token  ".into(),
             last_sync_at: "  2026-04-07T20:41:12Z ".into(),
         }
         .normalized();
@@ -768,6 +854,7 @@ mod tests {
             "desktop-client-id.apps.googleusercontent.com"
         );
         assert_eq!(config.google_drive_file_id, "1abCDefGhIJklmnOP");
+        assert_eq!(config.google_drive_refresh_token, "refresh-token");
         assert_eq!(config.last_sync_at, "2026-04-07T20:41:12Z");
     }
 
@@ -856,6 +943,15 @@ mod tests {
             tab_visible_count: 99,
             always_on_top: true,
             preferences_updated_at: " 2026-04-07T20:41:12Z ".into(),
+            notifications_enabled: true,
+            notify_only_when_app_hidden: false,
+            notification_sound_enabled: true,
+            notification_sound_path: " custom.wav ".into(),
+            quiet_hours_enabled: true,
+            quiet_hours_start: " 25:99 ".into(),
+            quiet_hours_end: " 08:30 ".into(),
+            default_due_warning_offset_minutes: 12,
+            notifications_updated_at: " 2026-04-07T20:41:12Z ".into(),
             sync: SyncConfig::default(),
             extra: BTreeMap::new(),
         }
@@ -870,6 +966,11 @@ mod tests {
         );
         assert!(!settings.custom_palette.contains_key("broken"));
         assert_eq!(settings.preferences_updated_at, "2026-04-07T20:41:12Z");
+        assert_eq!(settings.notification_sound_path, "custom.wav");
+        assert_eq!(settings.quiet_hours_start, "22:00");
+        assert_eq!(settings.quiet_hours_end, "08:30");
+        assert_eq!(settings.default_due_warning_offset_minutes, 0);
+        assert_eq!(settings.notifications_updated_at, "2026-04-07T20:41:12Z");
         assert_eq!(settings.tabs[0].name, GENERAL_TAB_NAME);
     }
 

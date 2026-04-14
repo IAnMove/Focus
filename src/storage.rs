@@ -400,6 +400,10 @@ fn sync_tasks_to_local(sync: &SyncFile, status: SyncTaskStatus, tabs: &[TabSpec]
                 .as_deref()
                 .map(sync_stamp_to_local)
                 .unwrap_or_default(),
+            reminder_at: String::new(),
+            reminder_sent_at: String::new(),
+            due_warning_offset_minutes: 0,
+            due_warning_sent_at: String::new(),
             tab: resolve_tab_name(&task.tab_id, tabs),
         })
         .collect()

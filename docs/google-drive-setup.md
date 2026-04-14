@@ -5,14 +5,13 @@
 Preparar la app de escritorio para usar Google Drive como proveedor de sync del
 mismo `focus-sync.json` que comparte con Android.
 
-Esta fase solo cubre configuracion local:
+La app de escritorio ya implementa:
 
 - `provider = "google_drive"`
 - `google_drive_client_id`
 - `google_drive_file_id`
-
-El transporte OAuth de escritorio todavia no esta implementado en Rust. La app
-ya guarda estos datos y muestra mensajes de estado coherentes en `Tools`.
+- autorizacion OAuth de escritorio con navegador del sistema
+- persistencia local del `refresh_token` para futuros syncs
 
 ## Credenciales que necesitas
 
@@ -65,15 +64,22 @@ archivo compartido por `file_id`, lo mas probable es que la implementacion
 inicial necesite `drive`, salvo que anadamos un flujo adicional de seleccion del
 archivo por el usuario.
 
-## Flujo previsto para la siguiente tarea
+## Flujo implementado
 
 1. Abrir el navegador del sistema con OAuth para `Desktop app`.
 2. Recibir un `authorization_code` con redirect local.
 3. Intercambiarlo por `access_token` y `refresh_token`.
-4. Guardar los tokens en la configuracion local.
+4. Guardar el `refresh_token` en la configuracion local.
 5. Descargar el contenido del `file_id`.
 6. Hacer merge con la cache local.
 7. Subir el `focus-sync.json` resultante al mismo `file_id`.
+
+Notas practicas:
+
+- La primera autorizacion se dispara con `Sync now`.
+- Los siguientes cambios locales ya pueden reutilizar el `refresh_token`.
+- El token se guarda en `checklist.json`; todavia no hay almacenamiento seguro
+  del secreto.
 
 ## Operaciones Drive previstas
 

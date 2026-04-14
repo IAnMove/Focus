@@ -1,0 +1,113 @@
+{
+  "active": [
+    {
+      "id": 1,
+      "text": "Buy groceries for the week",
+      "done": false,
+      "current": true,
+      "created_at": "2026-04-11 09:00",
+      "completed_at": "",
+      "extra_info": "Milk, fruit, bread, coffee",
+      "due_date": "2026-04-12 18:30",
+      "reminder_at": "",
+      "reminder_sent_at": "",
+      "due_warning_offset_minutes": 30,
+      "due_warning_sent_at": "",
+      "tab": "Home"
+    },
+    {
+      "id": 2,
+      "text": "Pay electricity bill",
+      "done": false,
+      "current": false,
+      "created_at": "2026-04-11 09:15",
+      "completed_at": "",
+      "extra_info": "Use the online banking app",
+      "due_date": "2026-04-13 12:00",
+      "reminder_at": "",
+      "reminder_sent_at": "",
+      "due_warning_offset_minutes": 15,
+      "due_warning_sent_at": "",
+      "tab": "Finance"
+    },
+    {
+      "id": 3,
+      "text": "Schedule dentist appointment",
+      "done": false,
+      "current": false,
+      "created_at": "2026-04-11 09:30",
+      "completed_at": "",
+      "extra_info": "Call the clinic after lunch",
+      "due_date": "2026-04-14 10:00",
+      "reminder_at": "",
+      "reminder_sent_at": "",
+      "due_warning_offset_minutes": 60,
+      "due_warning_sent_at": "",
+      "tab": "Personal"
+    }
+  ],
+  "history": [
+    {
+      "id": 1000,
+      "text": "Back up laptop photos",
+      "done": true,
+      "current": false,
+      "created_at": "2026-04-08 08:30",
+      "completed_at": "2026-04-10 19:10",
+      "extra_info": "Done before travelling",
+      "due_date": "",
+      "reminder_at": "",
+      "reminder_sent_at": "",
+      "due_warning_offset_minutes": 0,
+      "due_warning_sent_at": "",
+      "tab": "Personal"
+    }
+  ],
+  "settings": {
+    "tabs": [
+      {
+        "name": "General",
+        "priority": "normal"
+      },
+      {
+        "name": "Home",
+        "priority": "normal"
+      },
+      {
+        "name": "Personal",
+        "priority": "low"
+      },
+      {
+        "name": "Finance",
+        "priority": "high"
+      }
+    ],
+    "theme_name": "warm",
+    "custom_palette": {},
+    "font_scale": 1.0,
+    "accessibility_mode": false,
+    "show_item_meta": true,
+    "tab_visible_count": 4,
+    "always_on_top": true,
+    "preferences_updated_at": "2026-04-11T09:45:00Z",
+    "notifications_enabled": true,
+    "notify_only_when_app_hidden": false,
+    "notification_sound_enabled": true,
+    "notification_sound_path": "",
+    "quiet_hours_enabled": false,
+    "quiet_hours_start": "22:00",
+    "quiet_hours_end": "08:00",
+    "default_due_warning_offset_minutes": 30,
+    "notifications_updated_at": "2026-04-11T09:45:00Z",
+    "sync": {
+      "enabled": false,
+      "provider": "local_file",
+      "path": "",
+      "device_id": "demo-desktop",
+      "google_drive_client_id": "",
+      "google_drive_file_id": "",
+      "google_drive_refresh_token": "",
+      "last_sync_at": ""
+    }
+  }
+}

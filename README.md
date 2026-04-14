@@ -32,6 +32,7 @@ La paridad de UX/UI ya cubre la mayor parte del flujo diario: lista principal, `
 - Sync externo opcional con `focus-sync.json`, merge bidireccional y recarga manual desde `Tools`.
 - Seleccion de proveedor de sync: `local_file` o `google_drive`.
 - Configuracion inicial de Google Drive en `Tools` con `client_id` y `file_id`.
+- OAuth real para Google Drive en escritorio con autorizacion via navegador y `refresh_token` persistido localmente.
 - Persistencia de `active`, `history` y `settings`.
 
 ## Diferencias respecto a focus.py
@@ -39,7 +40,6 @@ La paridad de UX/UI ya cubre la mayor parte del flujo diario: lista principal, `
 Estas partes del script original o del roadmap de sync todavia no estan cerradas:
 
 - Editor de tema personalizado completo.
-- Transporte OAuth real para Google Drive en escritorio.
 - Persistencia segura de tokens de Google Drive.
 
 ## Sync externo
@@ -55,8 +55,9 @@ proveedor:
 Estado actual:
 
 - `local_file` ya hace push proactivo y merge por `updated_at` / `deleted_at`
-- `google_drive` ya tiene configuracion persistida en `Tools`
-- el transporte OAuth de Google Drive sigue pendiente
+- `google_drive` ya descarga, mezcla y vuelve a subir `focus-sync.json` usando OAuth de escritorio
+- la primera sincronizacion manual abre el navegador para conceder acceso y guardar el `refresh_token`
+- la persistencia de tokens sigue siendo local en claro dentro de `checklist.json`; el almacenamiento seguro queda pendiente
 
 ## Ejecutar
 
@@ -69,7 +70,7 @@ cargo run
 Build release:
 
 ```powershell
-cargo run --release
+cargo build --release
 ```
 
 Compilar sin ejecutar:
@@ -77,6 +78,52 @@ Compilar sin ejecutar:
 ```powershell
 cargo build
 ```
+
+Binario resultante:
+
+```powershell
+target\release\focus.exe
+```
+
+## Instalacion
+
+La app se puede distribuir en Windows, Linux y macOS, pero el binario de cada
+plataforma se genera mejor en esa misma plataforma.
+
+### Windows
+
+1. Descargar el ZIP de la release.
+2. Descomprimirlo.
+3. Ejecutar `focus.exe`.
+
+### Linux
+
+1. Descargar el artefacto de la release.
+2. Descomprimirlo.
+3. Dar permisos de ejecucion al binario si hace falta:
+
+```bash
+chmod +x focus
+```
+
+4. Ejecutar `./focus`.
+
+### macOS
+
+1. Descargar el artefacto de la release.
+2. Descomprimirlo.
+3. Abrir la app o ejecutar el binario generado para macOS.
+
+## Releases
+
+La forma recomendada de publicar una release es subir un asset por plataforma:
+
+- `focus-windows.zip`
+- `focus-linux.tar.gz`
+- `focus-macos.zip`
+
+Si quieres automatizarlo, lo siguiente natural es un workflow de GitHub Actions
+con una matriz por sistema operativo.
 
 ## Dependencias
 
@@ -110,3 +157,10 @@ macOS:
 Linux:
 
 `~/.focus/checklist.json`
+
+## Demo
+
+Si quieres enseñar la app sin usar tu configuracion real, usa
+[demo/settings.json](/i:/focus/demo/settings.json) como base. Tambien tienes
+una copia con el nombre real de la app en
+[demo/checklist.demo.json](/i:/focus/demo/checklist.demo.json).

@@ -147,3 +147,37 @@ Al cargar desde `focus-sync.json`:
 - No asumir que el orden del array coincide con el orden visual final; usar
   `order`.
 - No asumir que `updated_at` esta en hora local.
+
+## Encontrar el archivo en Android
+
+Si Android crea `focus-sync.json` en almacenamiento privado, el usuario no
+siempre podra verlo desde un gestor de archivos. En Android moderno hay tres
+escenarios habituales:
+
+- Almacenamiento interno privado: `Context.filesDir/focus-sync.json`
+- Almacenamiento externo privado: `Android/data/<package>/files/focus-sync.json`
+- Carpeta visible para el usuario: `Android/media/<package>/focus-sync.json`
+
+Recomendacion operativa:
+
+- Si el usuario debe localizar el archivo manualmente, es mejor escribirlo en
+  `Android/media/<package>/focus-sync.json` o exponer un flujo de exportacion
+  con el selector del sistema.
+- `Android/data/...` suele estar oculto o muy restringido en Android 11+.
+- Si el archivo queda en almacenamiento interno privado, el usuario normal no
+  podra navegar hasta el sin ADB o sin una opcion de exportar desde la app.
+
+Comandos utiles con ADB:
+
+```bash
+adb shell run-as <package> ls files
+adb shell run-as <package> cat files/focus-sync.json
+adb shell "run-as <package> cat files/focus-sync.json" > focus-sync.json
+```
+
+Si la app usa `Android/data/<package>/files`, tambien puede inspeccionarse con:
+
+```bash
+adb shell ls /sdcard/Android/data/<package>/files
+adb shell cat /sdcard/Android/data/<package>/files/focus-sync.json
+```

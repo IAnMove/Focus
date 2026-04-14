@@ -1,14 +1,18 @@
 mod audio;
+mod google_drive;
 mod model;
+mod notifications;
 mod storage;
 
 use std::cell::RefCell;
+use std::env;
 use std::path::PathBuf;
 use std::process::Command;
 use std::rc::Rc;
 use std::time::Duration;
 
-use chrono::{Datelike, Local, NaiveDate, NaiveDateTime};
+use chrono::{Datelike, Local, NaiveDate, NaiveDateTime, Timelike};
+use rfd::FileDialog;
 use slint::winit_030::{WinitWindowAccessor, winit};
 use slint::{Color, ModelRc, Timer, TimerMode, VecModel, Weak};
 
@@ -43,7 +47,13 @@ struct AppState {
     sync_device_id: String,
     sync_google_client_id: String,
     sync_google_file_id: String,
+    sync_google_refresh_token: String,
     sync_message: String,
+    notifications_enabled: bool,
+    notify_only_when_app_hidden: bool,
+    notification_sound_enabled: bool,
+    notification_sound_path: String,
+    default_due_warning_offset_minutes: u32,
     startup_enabled: bool,
     startup_message: String,
     tools_message: String,
@@ -70,9 +80,19 @@ impl AppState {
         let sync_enabled = data.settings.sync.enabled;
         let sync_provider = data.settings.sync.provider;
         let sync_path = data.settings.sync.path.clone();
-        let sync_device_id = data.settings.sync.device_id.clone();
+        let sync_device_id = if data.settings.sync.device_id.trim().is_empty() {
+            default_sync_device_id()
+        } else {
+            data.settings.sync.device_id.clone()
+        };
         let sync_google_client_id = data.settings.sync.google_drive_client_id.clone();
         let sync_google_file_id = data.settings.sync.google_drive_file_id.clone();
+        let sync_google_refresh_token = data.settings.sync.google_drive_refresh_token.clone();
+        let notifications_enabled = data.settings.notifications_enabled;
+        let notify_only_when_app_hidden = data.settings.notify_only_when_app_hidden;
+        let notification_sound_enabled = data.settings.notification_sound_enabled;
+        let notification_sound_path = data.settings.notification_sound_path.clone();
+        let default_due_warning_offset_minutes = data.settings.default_due_warning_offset_minutes;
         let startup_enabled = storage::startup_enabled().unwrap_or(false);
 
         Self {
@@ -97,7 +117,13 @@ impl AppState {
             sync_device_id,
             sync_google_client_id,
             sync_google_file_id,
+            sync_google_refresh_token,
             sync_message: String::new(),
+            notifications_enabled,
+            notify_only_when_app_hidden,
+            notification_sound_enabled,
+            notification_sound_path,
+            default_due_warning_offset_minutes,
             startup_enabled,
             startup_message: String::new(),
             tools_message: String::new(),
@@ -149,19 +175,24 @@ impl AppState {
     fn google_drive_sync_hint(&self, action: &str) -> String {
         let has_client_id = !self.sync_google_client_id.trim().is_empty();
         let has_file_id = !self.sync_google_file_id.trim().is_empty();
+        let has_refresh_token = !self.sync_google_refresh_token.trim().is_empty();
 
         match (has_client_id, has_file_id) {
             (false, false) => format!(
-                "Google Drive provider selected for {action}. Add client_id and file_id in Tools before enabling OAuth transport."
+                "Google Drive provider selected for {action}. Add client_id and file_id in Tools before syncing."
             ),
             (false, true) => format!(
-                "Google Drive provider selected for {action}. Add the desktop client_id in Tools before enabling OAuth transport."
+                "Google Drive provider selected for {action}. Add the desktop client_id in Tools before syncing."
             ),
             (true, false) => format!(
-                "Google Drive provider selected for {action}. Add the shared Drive file_id in Tools before enabling OAuth transport."
+                "Google Drive provider selected for {action}. Add the shared Drive file_id in Tools before syncing."
+            ),
+            (true, true) if has_refresh_token => format!(
+                "Google Drive provider ready for {action} (file_id: {}).",
+                self.sync_google_file_id.trim()
             ),
             (true, true) => format!(
-                "Google Drive provider configured for {action} (file_id: {}). OAuth transport is still pending.",
+                "Google Drive provider configured for {action} (file_id: {}). Run Sync now once to authorize the desktop app in your browser.",
                 self.sync_google_file_id.trim()
             ),
         }
@@ -196,36 +227,130 @@ impl AppState {
         self.data.settings.preferences_updated_at = storage::now_sync_stamp();
     }
 
+    fn touch_notifications(&mut self) {
+        self.data.settings.notifications_updated_at = storage::now_sync_stamp();
+    }
+
+    fn save_notification_config(&mut self) -> bool {
+        self.data.settings.notifications_enabled = self.notifications_enabled;
+        self.data.settings.notify_only_when_app_hidden = self.notify_only_when_app_hidden;
+        self.data.settings.notification_sound_enabled = self.notification_sound_enabled;
+        self.data.settings.notification_sound_path = self.notification_sound_path.trim().to_string();
+        self.data.settings.default_due_warning_offset_minutes =
+            model::normalize_due_warning_offset(self.default_due_warning_offset_minutes);
+        self.touch_notifications();
+        self.default_due_warning_offset_minutes = self.data.settings.default_due_warning_offset_minutes;
+        self.save();
+        self.set_tools_message("Notification settings saved.");
+        true
+    }
+
+    fn ensure_sync_device_id(&mut self) -> String {
+        if self.sync_device_id.trim().is_empty() {
+            self.sync_device_id = default_sync_device_id();
+        }
+        self.sync_device_id.trim().to_string()
+    }
+
+    fn choose_notification_sound(&mut self) -> bool {
+        let mut dialog = FileDialog::new().add_filter("Audio", &["wav", "mp3", "flac", "ogg"]);
+        if let Some(dir) = browse_start_dir(&self.notification_sound_path) {
+            dialog = dialog.set_directory(dir);
+        }
+        let file = dialog
+            .pick_file();
+        let Some(path) = file else {
+            self.set_tools_message("Sound selection cancelled.");
+            return false;
+        };
+        self.notification_sound_path = path.display().to_string();
+        self.save_notification_config();
+        self.set_tools_message(format!("Notification sound set to {}", path.display()));
+        true
+    }
+
+    fn choose_sync_path(&mut self) -> bool {
+        let mut dialog = FileDialog::new().add_filter("Sync file", &["json"]);
+        if let Some(dir) = browse_start_dir(&self.sync_path) {
+            dialog = dialog.set_directory(dir);
+        }
+        let file = dialog.pick_file();
+        let Some(path) = file else {
+            self.set_sync_message("Sync path selection cancelled.");
+            return false;
+        };
+        self.sync_path = path.display().to_string();
+        self.save_sync_config();
+        self.set_sync_message(format!("Sync file set to {}", path.display()));
+        true
+    }
+
+    fn choose_import_path(&mut self) -> bool {
+        let mut dialog = FileDialog::new().add_filter("JSON", &["json"]);
+        if let Some(dir) = browse_start_dir(&self.transfer_path) {
+            dialog = dialog.set_directory(dir);
+        }
+        let file = dialog.pick_file();
+        let Some(path) = file else {
+            self.set_tools_message("Import cancelled.");
+            return false;
+        };
+        self.transfer_path = path.display().to_string();
+        self.import_data_from_path(path)
+    }
+
+    fn choose_export_path(&mut self) -> bool {
+        let mut dialog = FileDialog::new().add_filter("JSON", &["json"]);
+        if let Some(dir) = browse_start_dir(&self.transfer_path) {
+            dialog = dialog.set_directory(dir);
+        } else if let Ok(dir) = env::current_dir() {
+            dialog = dialog.set_directory(dir);
+        }
+        let default_name = "focus-export.json";
+        let file = dialog.set_file_name(default_name).save_file();
+        let Some(path) = file else {
+            self.set_tools_message("Export cancelled.");
+            return false;
+        };
+        self.transfer_path = path.display().to_string();
+        self.export_data_to_path(path)
+    }
+
+    fn clear_notification_sound(&mut self) -> bool {
+        self.notification_sound_path.clear();
+        self.save_notification_config();
+        self.set_tools_message("Custom notification sound cleared.");
+        true
+    }
+
     fn push_sync_if_enabled(&mut self) {
         if !self.sync_enabled {
             return;
         }
 
         if self.sync_provider == model::SyncProvider::GoogleDrive {
-            self.set_sync_message(self.google_drive_sync_hint("background sync"));
+            if let Err(error) = self.sync_google_drive(false) {
+                self.set_sync_message(format!("Sync failed: {}", error));
+            }
             return;
         }
 
-        let path = self.sync_path.trim();
+        let path = self.sync_path.trim().to_string();
         if path.is_empty() {
             self.set_sync_message("Sync enabled but no path configured");
             return;
         }
 
-        let device_id = self.sync_device_id.trim();
-        if device_id.is_empty() {
-            self.set_sync_message("Sync enabled but device id is empty");
-            return;
-        }
+        let device_id = self.ensure_sync_device_id();
 
         let path = PathBuf::from(path);
-        let local_sync = storage::app_data_to_sync_file(&self.data, device_id);
+        let local_sync = storage::app_data_to_sync_file(&self.data, &device_id);
         let merged_sync = match storage::load_sync_file_from_path(&path) {
             Ok(remote_sync) => storage::merge_sync_files(
                 &local_sync,
                 &remote_sync,
                 &self.data.settings.sync.last_sync_at,
-                device_id,
+                &device_id,
             ),
             Err(error) if error.kind() == std::io::ErrorKind::NotFound => local_sync,
             Err(error) => {
@@ -240,9 +365,10 @@ impl AppState {
                 local_settings.sync.enabled = true;
                 local_settings.sync.provider = self.sync_provider;
                 local_settings.sync.path = self.sync_path.clone();
-                local_settings.sync.device_id = self.sync_device_id.clone();
+                local_settings.sync.device_id = device_id.clone();
                 local_settings.sync.google_drive_client_id = self.sync_google_client_id.clone();
                 local_settings.sync.google_drive_file_id = self.sync_google_file_id.clone();
+                local_settings.sync.google_drive_refresh_token = self.sync_google_refresh_token.clone();
                 local_settings.sync.last_sync_at = storage::now_sync_stamp();
                 let sync_config = local_settings.sync.clone();
                 self.data = storage::sync_file_to_app_data(&merged_sync, Some(&local_settings));
@@ -281,9 +407,13 @@ impl AppState {
 
         if let Some(task_id) = self.editing_task_id {
             if let Some(task) = self.data.active.iter_mut().find(|task| task.id == task_id) {
+                let due_changed = task.due_date != due_date;
                 task.text = text.to_string();
                 task.extra_info = self.draft_extra.trim().to_string();
                 task.due_date = due_date;
+                if due_changed {
+                    task.due_warning_sent_at.clear();
+                }
                 task.sync_updated_at = storage::now_sync_stamp();
             }
         } else {
@@ -291,6 +421,7 @@ impl AppState {
             item.created_at = storage::now_stamp();
             item.extra_info = self.draft_extra.trim().to_string();
             item.due_date = due_date;
+            item.due_warning_offset_minutes = self.default_due_warning_offset_minutes;
             item.sync_updated_at = storage::now_sync_stamp();
             item.tab = if self.active_tab == "All" {
                 model::GENERAL_TAB_NAME.to_string()
@@ -397,6 +528,9 @@ impl AppState {
         item.done = true;
         item.current = false;
         item.completed_at = storage::now_stamp();
+        item.reminder_at.clear();
+        item.reminder_sent_at.clear();
+        item.due_warning_sent_at.clear();
         item.sync_updated_at = storage::now_sync_stamp();
         self.undo_item = Some(item);
         self.touch_all_active_tasks();
@@ -417,6 +551,9 @@ impl AppState {
 
         item.done = false;
         item.completed_at.clear();
+        item.reminder_at.clear();
+        item.reminder_sent_at.clear();
+        item.due_warning_sent_at.clear();
         item.sync_updated_at = storage::now_sync_stamp();
         self.data.active.insert(0, item);
         self.open_task_menu_id = None;
@@ -584,6 +721,115 @@ impl AppState {
         true
     }
 
+    fn set_task_reminder(&mut self, task_id: u64, minutes: i64) -> bool {
+        let Some(task) = self.data.active.iter_mut().find(|task| task.id == task_id) else {
+            return false;
+        };
+        let task_title = task.text.clone();
+        let reminder_at = (Local::now().naive_local() + chrono::TimeDelta::minutes(minutes))
+            .format("%Y-%m-%d %H:%M")
+            .to_string();
+        task.reminder_at = reminder_at.clone();
+        task.reminder_sent_at.clear();
+        task.sync_updated_at = storage::now_sync_stamp();
+        self.open_task_menu_id = None;
+        self.save();
+        self.set_tools_message(format!("Reminder set for '{}' in {} minutes.", task_title, minutes));
+        true
+    }
+
+    fn clear_task_reminder(&mut self, task_id: u64) -> bool {
+        let Some(task) = self.data.active.iter_mut().find(|task| task.id == task_id) else {
+            return false;
+        };
+        let task_title = task.text.clone();
+        task.reminder_at.clear();
+        task.reminder_sent_at.clear();
+        task.sync_updated_at = storage::now_sync_stamp();
+        self.open_task_menu_id = None;
+        self.save();
+        self.set_tools_message(format!("Reminder cleared for '{}'.", task_title));
+        true
+    }
+
+    fn set_task_due_warning(&mut self, task_id: u64, minutes: u32) -> bool {
+        let Some(task) = self.data.active.iter_mut().find(|task| task.id == task_id) else {
+            return false;
+        };
+        let task_title = task.text.clone();
+        let offset = model::normalize_due_warning_offset(minutes);
+        task.due_warning_offset_minutes = offset;
+        task.due_warning_sent_at.clear();
+        task.sync_updated_at = storage::now_sync_stamp();
+        self.open_task_menu_id = None;
+        self.save();
+        let label = due_warning_label(offset);
+        self.set_tools_message(format!("Due warning for '{}' set to {}.", task_title, label));
+        true
+    }
+
+    fn process_notifications(&mut self, suppress_popups: bool) -> bool {
+        if !self.notifications_enabled {
+            return false;
+        }
+
+        let now = Local::now().naive_local();
+        let now_stamp = storage::now_stamp();
+        let mut changed = false;
+
+        for task in &mut self.data.active {
+            if !task.reminder_at.trim().is_empty()
+                && task.reminder_sent_at.trim().is_empty()
+                && parse_dt(&task.reminder_at).is_some_and(|at| at <= now)
+            {
+                if !suppress_popups {
+                    notifications::send_task_reminder(
+                        &task.text,
+                        &format!("Reminder scheduled for {}", task.reminder_at),
+                        self.notification_sound_enabled,
+                        &self.notification_sound_path,
+                    );
+                }
+                task.reminder_sent_at = now_stamp.clone();
+                changed = true;
+            }
+
+            if !task.due_date.trim().is_empty()
+                && task.due_warning_offset_minutes > 0
+                && task.due_warning_sent_at.trim().is_empty()
+            {
+                if let Some(due_at) = parse_dt(&task.due_date) {
+                    let warn_at =
+                        due_at - chrono::TimeDelta::minutes(task.due_warning_offset_minutes as i64);
+                    if warn_at <= now {
+                        if !suppress_popups {
+                            notifications::send_due_warning(
+                                &task.text,
+                                &format!(
+                                    "Due at {}. Warning offset {}.",
+                                    format_dt(&task.due_date),
+                                    due_warning_label(task.due_warning_offset_minutes)
+                                ),
+                                self.notification_sound_enabled,
+                                &self.notification_sound_path,
+                            );
+                        }
+                        task.due_warning_sent_at = now_stamp.clone();
+                        changed = true;
+                    }
+                }
+            }
+        }
+
+        if changed {
+            if let Some(store) = &self.store {
+                let _ = store.save(&self.data);
+            }
+        }
+
+        changed
+    }
+
     fn submit_tab(&mut self) -> bool {
         let name = model::normalize_tab_name(&self.draft_tab_name);
         if name.is_empty() || self.data.settings.tabs.iter().any(|tab| tab.name == name) {
@@ -659,21 +905,15 @@ impl AppState {
         true
     }
 
-    fn import_data(&mut self) -> bool {
-        let path = self.transfer_path.trim().to_string();
-        if path.is_empty() {
-            self.set_tools_message("Enter a JSON path to import.");
-            return false;
-        }
-
-        match storage::load_data_from_path(&PathBuf::from(&path)) {
+    fn import_data_from_path(&mut self, path: PathBuf) -> bool {
+        match storage::load_data_from_path(&path) {
             Ok(data) => {
                 self.data = data;
                 self.active_tab = "All".to_string();
                 self.history_visible = false;
                 self.tools_visible = true;
                 self.clear_draft();
-                self.set_tools_message(format!("Imported data from {}", path));
+                self.set_tools_message(format!("Imported data from {}", path.display()));
                 self.save();
                 true
             }
@@ -684,13 +924,7 @@ impl AppState {
         }
     }
 
-    fn export_data(&mut self) -> bool {
-        let path = self.transfer_path.trim();
-        if path.is_empty() {
-            self.transfer_path = storage::default_export_path().display().to_string();
-        }
-
-        let export_path = PathBuf::from(self.transfer_path.trim());
+    fn export_data_to_path(&mut self, export_path: PathBuf) -> bool {
         match storage::save_data_to_path(&export_path, &self.data) {
             Ok(()) => {
                 self.set_tools_message(format!("Exported data to {}", export_path.display()));
@@ -703,6 +937,27 @@ impl AppState {
         }
     }
 
+    #[allow(dead_code)]
+    fn import_data(&mut self) -> bool {
+        let path = self.transfer_path.trim();
+        if path.is_empty() {
+            self.set_tools_message("Choose a JSON file to import.");
+            return false;
+        }
+
+        self.import_data_from_path(PathBuf::from(path))
+    }
+
+    #[allow(dead_code)]
+    fn export_data(&mut self) -> bool {
+        let export_path = if self.transfer_path.trim().is_empty() {
+            storage::default_export_path()
+        } else {
+            PathBuf::from(self.transfer_path.trim())
+        };
+        self.export_data_to_path(export_path)
+    }
+
     fn save_sync_config(&mut self) -> bool {
         self.data.settings.sync.enabled = self.sync_enabled;
         self.data.settings.sync.provider = self.sync_provider;
@@ -710,6 +965,7 @@ impl AppState {
         self.data.settings.sync.device_id = self.sync_device_id.trim().to_string();
         self.data.settings.sync.google_drive_client_id = self.sync_google_client_id.trim().to_string();
         self.data.settings.sync.google_drive_file_id = self.sync_google_file_id.trim().to_string();
+        self.data.settings.sync.google_drive_refresh_token = self.sync_google_refresh_token.trim().to_string();
         self.save();
         if self.sync_provider == model::SyncProvider::GoogleDrive {
             self.set_sync_message(self.google_drive_sync_hint("config save"));
@@ -726,8 +982,16 @@ impl AppState {
         }
 
         if self.sync_provider == model::SyncProvider::GoogleDrive {
-            self.set_sync_message(self.google_drive_sync_hint("manual sync"));
-            return false;
+            return match self.sync_google_drive(true) {
+                Ok(message) => {
+                    self.set_sync_message(message);
+                    true
+                }
+                Err(error) => {
+                    self.set_sync_message(format!("Sync failed: {}", error));
+                    false
+                }
+            };
         }
 
         let path = self.sync_path.trim().to_string();
@@ -736,6 +1000,7 @@ impl AppState {
             return false;
         }
 
+        let device_id = self.ensure_sync_device_id();
         let sync_path = PathBuf::from(&path);
         match storage::load_sync_file_from_path(&sync_path) {
             Ok(sync_file) => {
@@ -743,15 +1008,15 @@ impl AppState {
                 local_settings.sync.enabled = self.sync_enabled;
                 local_settings.sync.provider = self.sync_provider;
                 local_settings.sync.path = path.clone();
-                local_settings.sync.device_id = self.sync_device_id.trim().to_string();
+                local_settings.sync.device_id = device_id.clone();
                 local_settings.sync.google_drive_client_id = self.sync_google_client_id.trim().to_string();
                 local_settings.sync.google_drive_file_id = self.sync_google_file_id.trim().to_string();
-                let local_sync = storage::app_data_to_sync_file(&self.data, self.sync_device_id.trim());
+                let local_sync = storage::app_data_to_sync_file(&self.data, &device_id);
                 let merged_sync = storage::merge_sync_files(
                     &local_sync,
                     &sync_file,
                     &self.data.settings.sync.last_sync_at,
-                    self.sync_device_id.trim(),
+                    &device_id,
                 );
                 let sync_stamp = storage::now_sync_stamp();
                 local_settings.sync.last_sync_at = sync_stamp.clone();
@@ -779,6 +1044,52 @@ impl AppState {
                 false
             }
         }
+    }
+
+    fn sync_google_drive(&mut self, interactive: bool) -> Result<String, google_drive::GoogleDriveError> {
+        let device_id = self.ensure_sync_device_id();
+
+        let config = google_drive::GoogleDriveConfig {
+            client_id: self.sync_google_client_id.trim().to_string(),
+            file_id: self.sync_google_file_id.trim().to_string(),
+            refresh_token: self.sync_google_refresh_token.trim().to_string(),
+        };
+        let session = google_drive::authorize(&config, interactive)?;
+        let remote_sync = google_drive::download_sync_file(&config, &session.access_token)?;
+        let local_sync = storage::app_data_to_sync_file(&self.data, &device_id);
+        let merged_sync = storage::merge_sync_files(
+            &local_sync,
+            &remote_sync,
+            &self.data.settings.sync.last_sync_at,
+            &device_id,
+        );
+        google_drive::upload_sync_file(&config, &session.access_token, &merged_sync)?;
+
+        let mut local_settings = self.data.settings.clone();
+        local_settings.sync.enabled = self.sync_enabled;
+        local_settings.sync.provider = self.sync_provider;
+        local_settings.sync.path = self.sync_path.trim().to_string();
+        local_settings.sync.device_id = device_id;
+        local_settings.sync.google_drive_client_id = self.sync_google_client_id.trim().to_string();
+        local_settings.sync.google_drive_file_id = self.sync_google_file_id.trim().to_string();
+        local_settings.sync.google_drive_refresh_token = session.refresh_token.clone();
+        local_settings.sync.last_sync_at = storage::now_sync_stamp();
+
+        self.sync_google_refresh_token = session.refresh_token;
+        self.data = storage::sync_file_to_app_data(&merged_sync, Some(&local_settings));
+        self.data.settings.sync = local_settings.sync.clone();
+        self.active_tab = "All".to_string();
+        self.clear_draft();
+        if let Some(store) = &self.store {
+            store
+                .save(&self.data)
+                .map_err(|error| google_drive::GoogleDriveError::Http(error.to_string()))?;
+        }
+
+        Ok(format!(
+            "Synced with Google Drive file_id {}.",
+            self.sync_google_file_id.trim()
+        ))
     }
 
     fn apply_theme_preset(&mut self, name: &str) -> bool {
@@ -871,11 +1182,43 @@ fn main() -> Result<(), slint::PlatformError> {
 
     let state = Rc::new(RefCell::new(AppState::new(data, store)));
     let undo_timer = Rc::new(RefCell::new(Timer::default()));
+    let notification_timer = Rc::new(RefCell::new(Timer::default()));
+    let always_on_top_timer = Rc::new(RefCell::new(Timer::default()));
+    let app_weak = app.as_weak();
 
     apply_always_on_top(&app, state.borrow().data.settings.always_on_top);
     refresh_ui(&app, &state.borrow());
 
     bind_callbacks(&app, state.clone(), undo_timer.clone());
+    notification_timer.borrow_mut().start(
+        TimerMode::Repeated,
+        Duration::from_secs(60),
+        {
+            let state = state.clone();
+            let app_weak = app_weak.clone();
+            move || {
+                let suppress_popups =
+                    should_suppress_notification_popups(&app_weak, &state.borrow());
+                let mut state = state.borrow_mut();
+                if state.process_notifications(suppress_popups) {
+                    refresh_if_possible(&app_weak, &state);
+                }
+            }
+        },
+    );
+    always_on_top_timer.borrow_mut().start(
+        TimerMode::SingleShot,
+        Duration::from_millis(100),
+        {
+            let app_weak = app_weak.clone();
+            let state = state.clone();
+            move || {
+                if let Some(app) = app_weak.upgrade() {
+                    apply_always_on_top(&app, state.borrow().data.settings.always_on_top);
+                }
+            }
+        },
+    );
 
     let result = app.run();
 
@@ -918,6 +1261,26 @@ fn bind_callbacks(app: &AppWindow, state: Rc<RefCell<AppState>>, undo_timer: Rc<
                     refresh_ui(&app, &state);
                 } else {
                     refresh_ui(&app, &state);
+                }
+            }
+        }
+    });
+
+    app.on_draft_due_picked({
+        let app_weak = app_weak.clone();
+        let state = state.clone();
+        move |year, month, day, hour, minute| {
+            let mut state = state.borrow_mut();
+            match normalize_due_components(year, month, day, hour, minute) {
+                Ok(value) => {
+                    state.draft_due_date = value;
+                    state.draft_has_due = true;
+                    state.draft_message.clear();
+                    refresh_if_possible(&app_weak, &state);
+                }
+                Err(message) => {
+                    state.draft_message = message;
+                    refresh_if_possible(&app_weak, &state);
                 }
             }
         }
@@ -1130,6 +1493,39 @@ fn bind_callbacks(app: &AppWindow, state: Rc<RefCell<AppState>>, undo_timer: Rc<
         }
     });
 
+    app.on_set_task_reminder({
+        let app_weak = app_weak.clone();
+        let state = state.clone();
+        move |task_id, minutes| {
+            let mut state = state.borrow_mut();
+            if state.set_task_reminder(task_id as u64, minutes as i64) {
+                refresh_if_possible(&app_weak, &state);
+            }
+        }
+    });
+
+    app.on_clear_task_reminder({
+        let app_weak = app_weak.clone();
+        let state = state.clone();
+        move |task_id| {
+            let mut state = state.borrow_mut();
+            if state.clear_task_reminder(task_id as u64) {
+                refresh_if_possible(&app_weak, &state);
+            }
+        }
+    });
+
+    app.on_set_task_due_warning({
+        let app_weak = app_weak.clone();
+        let state = state.clone();
+        move |task_id, minutes| {
+            let mut state = state.borrow_mut();
+            if state.set_task_due_warning(task_id as u64, minutes as u32) {
+                refresh_if_possible(&app_weak, &state);
+            }
+        }
+    });
+
     app.on_drag_task_step({
         let app_weak = app_weak.clone();
         let state = state.clone();
@@ -1203,8 +1599,9 @@ fn bind_callbacks(app: &AppWindow, state: Rc<RefCell<AppState>>, undo_timer: Rc<
         let state = state.clone();
         move || {
             let mut state = state.borrow_mut();
-            state.import_data();
-            refresh_if_possible(&app_weak, &state);
+            if state.choose_import_path() {
+                refresh_if_possible(&app_weak, &state);
+            }
         }
     });
 
@@ -1213,8 +1610,9 @@ fn bind_callbacks(app: &AppWindow, state: Rc<RefCell<AppState>>, undo_timer: Rc<
         let state = state.clone();
         move || {
             let mut state = state.borrow_mut();
-            state.export_data();
-            refresh_if_possible(&app_weak, &state);
+            if state.choose_export_path() {
+                refresh_if_possible(&app_weak, &state);
+            }
         }
     });
 
@@ -1287,6 +1685,63 @@ fn bind_callbacks(app: &AppWindow, state: Rc<RefCell<AppState>>, undo_timer: Rc<
         let _ = open_project_link(url.as_str());
     });
 
+    app.on_open_sync_info(move || {
+        let _ = open_sync_info_document();
+    });
+
+    app.on_save_notification_config({
+        let app_weak = app_weak.clone();
+        let state = state.clone();
+        move || {
+            if let Some(app) = app_weak.upgrade() {
+                let mut state = state.borrow_mut();
+                state.notifications_enabled = app.get_notifications_enabled();
+                state.notify_only_when_app_hidden = app.get_notify_only_when_app_hidden();
+                state.notification_sound_enabled = app.get_notification_sound_enabled();
+                state.notification_sound_path = app.get_notification_sound_path().to_string();
+                state.default_due_warning_offset_minutes =
+                    due_warning_minutes_from_label(app.get_default_due_warning_label().as_str());
+                state.save_notification_config();
+                refresh_ui(&app, &state);
+            }
+        }
+    });
+
+    app.on_choose_notification_sound({
+        let app_weak = app_weak.clone();
+        let state = state.clone();
+        move || {
+            let mut state = state.borrow_mut();
+            if state.choose_notification_sound() {
+                refresh_if_possible(&app_weak, &state);
+            }
+        }
+    });
+
+    app.on_clear_notification_sound({
+        let app_weak = app_weak.clone();
+        let state = state.clone();
+        move || {
+            let mut state = state.borrow_mut();
+            if state.clear_notification_sound() {
+                refresh_if_possible(&app_weak, &state);
+            }
+        }
+    });
+
+    app.on_test_notification_sound({
+        let state = state.clone();
+        move || {
+            let state = state.borrow();
+            notifications::send_task_reminder(
+                "Notification sound test",
+                "This is how task reminders will sound.",
+                state.notification_sound_enabled,
+                &state.notification_sound_path,
+            );
+        }
+    });
+
     app.on_save_sync_config({
         let app_weak = app_weak.clone();
         let state = state.clone();
@@ -1301,6 +1756,17 @@ fn bind_callbacks(app: &AppWindow, state: Rc<RefCell<AppState>>, undo_timer: Rc<
                 state.sync_google_file_id = app.get_sync_google_file_id().to_string();
                 state.save_sync_config();
                 refresh_ui(&app, &state);
+            }
+        }
+    });
+
+    app.on_choose_sync_path({
+        let app_weak = app_weak.clone();
+        let state = state.clone();
+        move || {
+            let mut state = state.borrow_mut();
+            if state.choose_sync_path() {
+                refresh_if_possible(&app_weak, &state);
             }
         }
     });
@@ -1344,6 +1810,39 @@ fn apply_always_on_top(app: &AppWindow, enabled: bool) {
             };
             window.set_window_level(level);
         });
+}
+
+fn browse_start_dir(path: &str) -> Option<PathBuf> {
+    let trimmed = path.trim();
+    if trimmed.is_empty() {
+        return env::current_dir().ok();
+    }
+
+    let candidate = PathBuf::from(trimmed);
+    if candidate.is_dir() {
+        return Some(candidate);
+    }
+
+    candidate
+        .parent()
+        .map(PathBuf::from)
+        .or_else(|| env::current_dir().ok())
+}
+
+fn default_sync_device_id() -> String {
+    let host = env::var("COMPUTERNAME")
+        .or_else(|_| env::var("HOSTNAME"))
+        .unwrap_or_else(|_| "desktop".to_string());
+    let slug: String = host
+        .chars()
+        .filter(|ch| ch.is_ascii_alphanumeric() || *ch == '-' || *ch == '_')
+        .map(|ch| ch.to_ascii_lowercase())
+        .collect();
+    if slug.is_empty() {
+        "focus-desktop".to_string()
+    } else {
+        format!("focus-{slug}")
+    }
 }
 
 fn refresh_ui(app: &AppWindow, state: &AppState) {
@@ -1400,6 +1899,13 @@ fn refresh_ui(app: &AppWindow, state: &AppState) {
     app.set_draft_extra(state.draft_extra.clone().into());
     app.set_draft_due_date(state.draft_due_date.clone().into());
     app.set_draft_has_due(state.draft_has_due);
+    let (picker_year, picker_month, picker_day, picker_hour, picker_minute) =
+        due_picker_seed(&state.draft_due_date);
+    app.set_draft_due_picker_year(picker_year);
+    app.set_draft_due_picker_month(picker_month);
+    app.set_draft_due_picker_day(picker_day);
+    app.set_draft_due_picker_hour(picker_hour);
+    app.set_draft_due_picker_minute(picker_minute);
     app.set_draft_message(state.draft_message.clone().into());
     app.set_draft_tab_name(state.draft_tab_name.clone().into());
     app.set_transfer_path(state.transfer_path.clone().into());
@@ -1411,6 +1917,13 @@ fn refresh_ui(app: &AppWindow, state: &AppState) {
     app.set_sync_google_client_id(state.sync_google_client_id.clone().into());
     app.set_sync_google_file_id(state.sync_google_file_id.clone().into());
     app.set_sync_message(state.sync_message.clone().into());
+    app.set_notifications_enabled(state.notifications_enabled);
+    app.set_notify_only_when_app_hidden(state.notify_only_when_app_hidden);
+    app.set_notification_sound_enabled(state.notification_sound_enabled);
+    app.set_notification_sound_path(state.notification_sound_path.clone().into());
+    app.set_default_due_warning_label(
+        due_warning_label(state.default_due_warning_offset_minutes).into(),
+    );
     app.set_startup_enabled(state.startup_enabled);
     app.set_startup_message(state.startup_message.clone().into());
     app.set_about_version(env!("CARGO_PKG_VERSION").into());
@@ -1504,6 +2017,47 @@ fn open_project_link(url: &str) -> std::io::Result<()> {
 
     #[allow(unreachable_code)]
     Ok(())
+}
+
+fn open_sync_info_document() -> std::io::Result<()> {
+    let path = std::env::current_dir()?.join("info.md");
+    let path = std::fs::canonicalize(&path).unwrap_or(path);
+    open_project_link(path.to_string_lossy().as_ref())
+}
+
+fn due_warning_label(minutes: u32) -> &'static str {
+    match minutes {
+        5 => "5m",
+        15 => "15m",
+        30 => "30m",
+        60 => "1h",
+        _ => "Off",
+    }
+}
+
+fn due_warning_minutes_from_label(label: &str) -> u32 {
+    match label.trim().to_ascii_lowercase().as_str() {
+        "5m" => 5,
+        "15m" => 15,
+        "30m" => 30,
+        "1h" => 60,
+        _ => 0,
+    }
+}
+
+fn should_suppress_notification_popups(app_weak: &Weak<AppWindow>, state: &AppState) -> bool {
+    if !state.notify_only_when_app_hidden {
+        return false;
+    }
+    let Some(app) = app_weak.upgrade() else {
+        return true;
+    };
+    let mut suppress = true;
+    app.window()
+        .with_winit_window(|window: &winit::window::Window| {
+            suppress = window.has_focus();
+        });
+    suppress
 }
 
 fn parse_hex_color(value: &str) -> Color {
@@ -1675,6 +2229,15 @@ fn task_meta(task: &model::TaskItem) -> String {
     if task.current {
         parts.push("current".to_string());
     }
+    if !task.reminder_at.trim().is_empty() {
+        parts.push(format!("remind {}", format_dt(&task.reminder_at)));
+    }
+    if task.due_warning_offset_minutes > 0 {
+        parts.push(format!(
+            "warn {} before due",
+            due_warning_label(task.due_warning_offset_minutes)
+        ));
+    }
     if !task.extra_info.trim().is_empty() {
         parts.push("extra info".to_string());
     }
@@ -1780,6 +2343,42 @@ fn normalize_due_input(value: &str) -> Result<String, String> {
     parse_dt(trimmed)
         .map(|dt| dt.format("%Y-%m-%d %H:%M").to_string())
         .ok_or_else(|| "Due date must use YYYY-MM-DD or YYYY-MM-DD HH:MM".to_string())
+}
+
+fn normalize_due_components(
+    year: i32,
+    month: i32,
+    day: i32,
+    hour: i32,
+    minute: i32,
+) -> Result<String, String> {
+    let date = NaiveDate::from_ymd_opt(year, month as u32, day as u32)
+        .ok_or_else(|| "Selected due date is invalid".to_string())?;
+    let Some(date_time) = date.and_hms_opt(hour as u32, minute as u32, 0) else {
+        return Err("Selected due time is invalid".to_string());
+    };
+    Ok(date_time.format("%Y-%m-%d %H:%M").to_string())
+}
+
+fn due_picker_seed(value: &str) -> (i32, i32, i32, i32, i32) {
+    if let Some(dt) = parse_dt(value) {
+        return (
+            dt.year(),
+            dt.month() as i32,
+            dt.day() as i32,
+            dt.hour() as i32,
+            dt.minute() as i32,
+        );
+    }
+
+    let now = Local::now().naive_local();
+    (
+        now.year(),
+        now.month() as i32,
+        now.day() as i32,
+        now.hour() as i32,
+        now.minute() as i32,
+    )
 }
 
 fn extract_first_url(text: &str) -> Option<String> {
@@ -1897,6 +2496,10 @@ mod tests {
             completed_at: "2026-04-05 12:30".into(),
             extra_info: "Completed".into(),
             due_date: String::new(),
+            reminder_at: String::new(),
+            reminder_sent_at: String::new(),
+            due_warning_offset_minutes: 0,
+            due_warning_sent_at: String::new(),
             tab: "Work".into(),
         });
         data
@@ -1925,7 +2528,13 @@ mod tests {
             sync_device_id: String::new(),
             sync_google_client_id: String::new(),
             sync_google_file_id: String::new(),
+            sync_google_refresh_token: String::new(),
             sync_message: String::new(),
+            notifications_enabled: true,
+            notify_only_when_app_hidden: false,
+            notification_sound_enabled: true,
+            notification_sound_path: String::new(),
+            default_due_warning_offset_minutes: 0,
             startup_enabled: false,
             startup_message: String::new(),
             tools_message: String::new(),
@@ -2068,6 +2677,7 @@ mod tests {
         state.sync_device_id = "desktop".into();
         state.sync_google_client_id = "client.apps.googleusercontent.com".into();
         state.sync_google_file_id = "file-123".into();
+        state.sync_google_refresh_token = "refresh-123".into();
 
         assert!(state.save_sync_config());
         assert_eq!(state.data.settings.sync.provider, model::SyncProvider::GoogleDrive);
@@ -2076,19 +2686,20 @@ mod tests {
             "client.apps.googleusercontent.com"
         );
         assert_eq!(state.data.settings.sync.google_drive_file_id, "file-123");
+        assert_eq!(state.data.settings.sync.google_drive_refresh_token, "refresh-123");
         assert!(state.sync_message.contains("file-123"));
     }
 
     #[test]
-    fn sync_now_rejects_google_drive_until_transport_exists() {
+    fn sync_now_rejects_google_drive_without_required_fields() {
         let mut state = test_state();
         state.sync_enabled = true;
         state.sync_provider = model::SyncProvider::GoogleDrive;
-        state.sync_google_client_id = "client.apps.googleusercontent.com".into();
+        state.sync_device_id = "desktop".into();
         state.sync_google_file_id = "file-123".into();
 
         assert!(!state.sync_now());
-        assert!(state.sync_message.contains("OAuth transport is still pending"));
+        assert!(state.sync_message.contains("desktop client_id") || state.sync_message.contains("client_id"));
     }
 
     #[test]
@@ -2103,6 +2714,20 @@ mod tests {
         let url = extract_first_url("Check https://example.com/docs, now").unwrap();
         assert_eq!(url, "https://example.com/docs");
         assert!(short_link_label("https://example.com").starts_with("Open https://example.com"));
+    }
+
+    #[test]
+    fn normalize_due_components_formats_picker_selection() {
+        assert_eq!(
+            normalize_due_components(2026, 4, 12, 18, 30).unwrap(),
+            "2026-04-12 18:30"
+        );
+        assert!(normalize_due_components(2026, 2, 30, 18, 30).is_err());
+    }
+
+    #[test]
+    fn due_picker_seed_uses_existing_due_value() {
+        assert_eq!(due_picker_seed("2026-04-12 18:30"), (2026, 4, 12, 18, 30));
     }
 
     #[test]
